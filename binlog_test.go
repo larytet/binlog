@@ -38,6 +38,15 @@ func TestStringLocation(t *testing.T) {
 var s0 string = "Hello, world"
 var s1 string = "Hello, world2"
 
+func TestStringLocationGlobalLocalHeader(t *testing.T) {
+	s1 := "Hello, world2"
+	hdr0 := (*reflect.StringHeader)(unsafe.Pointer(&s0))
+	hdr1 := (*reflect.StringHeader)(unsafe.Pointer(&s1))
+	if hdr0.Data+0x100 > hdr1.Data {
+		t.Fatalf("Bad locations %x %x", hdr0.Data, hdr1.Data)
+	}
+}
+
 func TestStringLocationGlobal(t *testing.T) {
 	p0 := uintptr(unsafe.Pointer(&s0))
 	p1 := uintptr(unsafe.Pointer(&s1))
@@ -55,14 +64,5 @@ func TestStringLocationGlobalLocal(t *testing.T) {
 	p1 := uintptr(unsafe.Pointer(&s1))
 	if p0 != p1 {
 		//t.Fatalf("Bad locations %x %x", p0, p1)
-	}
-}
-
-func TestStringLocationGlobalLocalHeader(t *testing.T) {
-	s1 := "Hello, world1"
-	hdr0 := (*reflect.StringHeader)(unsafe.Pointer(&s0))
-	hdr1 := (*reflect.StringHeader)(unsafe.Pointer(&s1))
-	if hdr0.Data+0x100 > hdr1.Data {
-		t.Fatalf("Bad locations %x %x", hdr0.Data, hdr1.Data)
 	}
 }
