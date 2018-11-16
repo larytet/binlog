@@ -17,7 +17,8 @@ func BenchmarkCheckStringPointer(b *testing.B) {
 }
 
 func align(v uintptr) uintptr {
-	return (v + 0x03) & (^uintptr(0x03))
+	mul := uintptr((1 << 3) - 1)
+	return (v + mul) & (^uintptr(mul))
 }
 
 func TestStringLocation(t *testing.T) {
@@ -43,6 +44,6 @@ func TestStringLocationGlobal(t *testing.T) {
 	p2 := p0 + align(uintptr(len(s0)))
 	p3 := p1 + align(uintptr(len(s1)))
 	if p1 != p2 && p0 != p3 {
-		t.Fatalf("Bad locations %x %x, expected %x %x", p0, p1, p2, p3)
+		t.Fatalf("Bad locations %x %x, expected %x %x, %d, %d, %d", p0, p1, p2, p3, align(uintptr(len(s0))), len(s0), align(uintptr(len(s1))))
 	}
 }
