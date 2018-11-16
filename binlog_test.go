@@ -6,17 +6,6 @@ import (
 	"unsafe"
 )
 
-func BenchmarkCheckStringPointer(b *testing.B) {
-	s := "Hello, world"
-	p0 := uintptr(unsafe.Pointer(&s))
-	for i := 0; i < b.N; i++ {
-		p := uintptr(unsafe.Pointer(&s))
-		if p != p0 {
-			b.Fatalf("Different pointers %v %v", p0, p)
-		}
-	}
-}
-
 func align(v uintptr) uintptr {
 	mul := uintptr((1 << 3) - 1)
 	return (v + mul) & (^uintptr(mul))
@@ -69,4 +58,8 @@ func TestStringLocationGlobalLocal(t *testing.T) {
 	if p0 != p1 {
 		//t.Fatalf("Bad locations %x %x", p0, p1)
 	}
+}
+
+func TestInit(t *testing.T) {
+	Init()
 }
