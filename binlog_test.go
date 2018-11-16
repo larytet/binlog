@@ -23,7 +23,7 @@ func align(v uintptr) uintptr {
 }
 
 func getStringSize(s string) uintptr {
-	return align(uintptr(len(s0)))
+	return align(uintptr(len(s)))
 }
 
 func TestStringLocation(t *testing.T) {
