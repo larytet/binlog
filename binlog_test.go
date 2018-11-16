@@ -22,14 +22,18 @@ func align(v uintptr) uintptr {
 	return (v + mul) & (^uintptr(mul))
 }
 
+func getStringSize(s string) uintptr {
+	return align(uintptr(len(s0)))
+}
+
 func TestStringLocation(t *testing.T) {
 	s0 := "Hello, world"
 	s1 := "Hello, world2"
 	p0 := uintptr(unsafe.Pointer(&s0))
 	p1 := uintptr(unsafe.Pointer(&s1))
 
-	p2 := p0 + align(uintptr(len(s0)))
-	p3 := p1 + align(uintptr(len(s1)))
+	p2 := p0 + getStringSize(s0)
+	p3 := p1 + getStringSize(s1)
 	if p1 != p2 && p0 != p3 {
 		t.Fatalf("Bad locations %x %x, expected %x %x", p0, p1, p2, p3)
 	}
@@ -51,8 +55,8 @@ func TestStringLocationGlobal(t *testing.T) {
 	p0 := uintptr(unsafe.Pointer(&s0))
 	p1 := uintptr(unsafe.Pointer(&s1))
 
-	p2 := p0 + align(uintptr(len(s0)))
-	p3 := p1 + align(uintptr(len(s1)))
+	p2 := p0 + getStringSize(s0)
+	p3 := p1 + getStringSize(s1)
 	if p1 != p2 && p0 != p3 {
 		t.Fatalf("Bad locations %x %x, expected %x %x", p0, p1, p2, p3)
 	}
