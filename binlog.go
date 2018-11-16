@@ -1,5 +1,6 @@
 package binlog
 
+// Based on the idea https://github.com/ScottMansfield/nanolog/issues/4
 import (
 	"log"
 	"os"
