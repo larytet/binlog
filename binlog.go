@@ -4,7 +4,7 @@ package binlog
 import (
 	//	"C"
 	"log"
-	"runtime"
+	//"runtime"
 	//	"os"
 	_ "unsafe"
 )
@@ -18,7 +18,7 @@ type Binlog struct {
 
 //go:noescape
 //go:linkname runtime_firstmoduledata runtime.firstmoduledata
-var runtime_firstmoduledata runtime.firstmoduledata
+var runtime_firstmoduledata uintptr
 
 func Init() *Binlog {
 	for md := &runtime_firstmoduledata; md != nil; md = md.next {
