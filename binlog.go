@@ -14,6 +14,7 @@ type Binlog struct {
 }
 
 // See https://stackoverflow.com/questions/48445593/go-function-definition-in-another-package
+// https://golang.org/cmd/cgo/#hdr-Go_references_to_C
 
 //go:noescape
 //go:linkname firstmoduledata runtime.firstmoduledata
