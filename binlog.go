@@ -20,7 +20,7 @@ type Binlog struct {
 //go:linkname runtime_firstmoduledata runtime.firstmoduledata
 var runtime_firstmoduledata uintptr
 
-// Straight from https://golang.org/src/runtime/symtab.go
+// Straight from https://golang.org/src/runtime/symtab.go?m=text
 type functab struct {
 	entry   uintptr
 	funcoff uintptr
