@@ -20,8 +20,57 @@ type Binlog struct {
 //go:linkname runtime_firstmoduledata runtime.firstmoduledata
 var runtime_firstmoduledata uintptr
 
+// Straight from https://golang.org/src/runtime/symtab.go
+type functab struct {
+	entry   uintptr
+	funcoff uintptr
+}
+
+type textsect struct {
+	vaddr    uintptr // prelinked section vaddr
+	length   uintptr // section length
+	baseaddr uintptr // relocated section address
+}
+
+type moduledata struct {
+	pclntable             []byte
+	ftab                  []functab
+	filetab               []uint32
+	findfunctab           uintptr
+	minpc, maxpc          uintptr
+	text, etext           uintptr
+	noptrdata, enoptrdata uintptr
+	data, edata           uintptr
+	bss, ebss             uintptr
+	noptrbss, enoptrbss   uintptr
+	end, gcdata, gcbss    uintptr
+	types, etypes         uintptr
+	textsectmap           []textsect
+	typelinks             []int32 // offsets from types
+	itablinks             []*itab
+
+	ptab []ptabEntry
+
+	pluginpath string
+	pkghashes  []modulehash
+
+	modulename   string
+	modulehashes []modulehash
+
+	hasmain uint8 // 1 if module contains the main function, 0 otherwise
+
+	gcdatamask, gcbssmask bitvector
+
+	typemap map[typeOff]*_type // offset to *_rtype in previous module
+
+	bad bool // module failed to load and should be ignored
+
+	next *moduledata
+}
+
 func Init() *Binlog {
-	for md := &runtime_firstmoduledata; md != nil; md = md.next {
+	var firstmoduledata *moduledata = (*moduledata)(unsafe.Pointer(&runtime_firstmoduledata))
+	for md := firstmoduledata; md != nil; md = md.next {
 		if md.bad {
 			continue
 		}
