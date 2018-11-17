@@ -17,11 +17,11 @@ type Binlog struct {
 // https://golang.org/cmd/cgo/#hdr-Go_references_to_C
 
 //go:noescape
-//go:linkname firstmoduledata runtime.firstmoduledata
-var firstmoduledata runtime.moduledata
+//go:linkname runtime_firstmoduledata runtime.firstmoduledata
+var runtime_firstmoduledata runtime.firstmoduledata
 
 func Init() *Binlog {
-	for md := &firstmoduledata; md != nil; md = md.next {
+	for md := &runtime_firstmoduledata; md != nil; md = md.next {
 		if md.bad {
 			continue
 		}
