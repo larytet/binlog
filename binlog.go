@@ -2,29 +2,31 @@ package binlog
 
 // Based on the idea https://github.com/ScottMansfield/nanolog/issues/4
 import (
+	//	"C"
 	"log"
-	"os"
+	"runtime"
+	//	"os"
+	_ "unsafe"
 )
 
 type Binlog struct {
 	baseOffset uintptr
 }
 
-// Read the executable, look for "hmst", assume that this is where all strings are
-// this is my base address for all strings in the system
-// See https://www.jonathan-petitcolas.com/2014/09/25/parsing-binary-files-in-go.html
-func Init() *Binlog {
-	executable, err := os.Executable()
-	if err != nil {
-		log.Fatal("Failed to get eecutable", err)
-	}
-	file, err := os.Open(executable)
-	if err != nil {
-		log.Fatalf("Error while opening file %s %v", executable, err)
-	}
-	defer file.Close()
-	base := getOffset
+// See https://stackoverflow.com/questions/48445593/go-function-definition-in-another-package
 
+//go:noescape
+//go:linkname firstmoduledata runtime.firstmoduledata
+var firstmoduledata runtime.moduledata
+
+func Init() *Binlog {
+	for md := &firstmoduledata; md != nil; md = md.next {
+		if md.bad {
+			continue
+		}
+		data := md.noptrdata
+		log.Printf("%v", data)
+	}
 	var binlog Binlog
 
 	return &binlog
