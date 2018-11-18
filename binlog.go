@@ -48,7 +48,7 @@ func (b *Binlog) getStringIndex(s string) uint {
 	if sDataOffset < b.constDataSize {
 		return sDataOffset / ALIGNMENT
 	} else {
-		log.Printf("String %x is out of address range %x-%x", sData, b.constDataBase, b.constDataBase+b.constDataSize)
+		log.Printf("String %x is out of address range %x-%x", sData, b.constDataBase, b.constDataBase+b.constDataSize*ALIGNMENT)
 		return b.constDataSize
 	}
 
