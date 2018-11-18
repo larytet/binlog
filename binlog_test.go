@@ -154,6 +154,7 @@ func parseField(field interface{}, line string) error {
 // see https://unix.stackexchange.com/questions/224015/memory-usage-of-a-given-process-using-linux-proc-filesystem
 // https://www.cyberciti.biz/faq/linux-viewing-process-address-space-command/
 // https://www.dennyzhang.com/check_process
+// I need /proc/self/maps, /proc/self/status, /proc/self/statm
 func getTextSize() (textSize uint, err error) {
 	pid := os.Getpid()
 	path := fmt.Sprintf("/proc/%d/statm", pid)
