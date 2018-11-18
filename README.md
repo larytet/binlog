@@ -18,7 +18,7 @@ The original idea is https://github.com/ScottMansfield/nanolog/issues/4
 Example:
 
 ```Go
-func TestInit(t *testing.T) {
+{
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	binlog := Init(uint(constDataBase), uint(constDataSize))
 	binlog.PrintUint32("PrintUint32 %u", 10)
