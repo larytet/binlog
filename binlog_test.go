@@ -65,7 +65,7 @@ func TestStringLocationGlobalLocal(t *testing.T) {
 
 func getMyPath() (path string, err error) {
 	pid := os.Getpid()
-	path := fmt.Sprintf("/proc/%d/exe", pid)
+	path = fmt.Sprintf("/proc/%d/exe", pid)
 	return os.Readlink(path)
 }
 
