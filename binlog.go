@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/jandre/procfs"
 	"github.com/jandre/procfs/maps"
+	"io"
 	"log"
 	"os"
 	"reflect"
@@ -13,30 +14,56 @@ import (
 	"unsafe"
 )
 
+/*
+#cgo CFLAGS: -std=c99
+
+#include <stdlib.h>
+#include <stdint.h>
+*/
+import "C"
+
 type handler struct {
 	formatString string
 	index        uint32
-	logger       Logger
-	segs         []string
+	writers      []writer
 }
 
 var defaultHandler handler
+
+type writer interface {
+	write(io.Writer, unsafe.Pointer) error
+}
+
+type writerByteArray struct {
+	count int
+}
+
+func (w *writerByteArray) write(ioWriter io.Writer, data unsafe.Pointer) error {
+	// I am doing something which https://golang.org/pkg/unsafe/ implicitly forbids
+	var hdr reflect.SliceHeader
+	hdr.Len = w.count
+	hdr.Data = uintptr(unsafe.Pointer((*byte)(data)))
+	hdr.Cap = w.count
+	_, err := ioWriter.Write(*((*[]byte)(unsafe.Pointer(&hdr))))
+	return err
+}
 
 type Binlog struct {
 	constDataBase uint
 	constDataSize uint
 	handlers      []*handler
 	currentIndex  uint32
+	ioWriter      io.Writer
 }
 
 const ALIGNMENT uint = 8
 
 // constDataBase is an address of the initialzied const data, constDataSize is it's size
-func Init(constDataBase uint, constDataSize uint) *Binlog {
+func Init(ioWriter io.Writer, constDataBase uint, constDataSize uint) *Binlog {
 	// allocate one handler more for handling default cases
 	constDataSize = constDataSize / ALIGNMENT
 	handlers := make([]*handler, constDataSize+1)
-	binlog := &Binlog{constDataBase: constDataBase, constDataSize: constDataSize, handlers: handlers}
+	binlog := &Binlog{constDataBase: constDataBase, constDataSize: constDataSize, handlers: handlers, ioWriter: ioWriter}
 	return binlog
 }
 
@@ -57,247 +84,111 @@ func (b *Binlog) getStringIndex(s string) uint {
 
 }
 
-func (b *Binlog) addHandler(fmt string) *handler {
+func (b *Binlog) createHandler(fmt string) (*handler, error) {
 	var h handler
 	h.index = atomic.AddUint32(&b.currentIndex, 1) // If I want to start from zero I can add (-1)
 	h.formatString = fmt
-	h.logger, h.segs = parseLogLine(fmt)
-	return &h
+	var err error
+	h.writers, err = parseLogLine(fmt)
+	return &h, err
 }
 
-// All arguments are uint32
-func (b *Binlog) PrintUint32(fmt string, args ...uint32) {
+func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
+	var err error
 	var h *handler = &defaultHandler
-	sIndex := b.getStringIndex(fmt)
+	sIndex := b.getStringIndex(fmtStr)
 	if sIndex != b.constDataSize {
 		h = b.handlers[sIndex]
 		if h == nil { // cache miss?
-			h = b.addHandler(fmt)
+			h, err = b.createHandler(fmtStr)
+			if err != nil {
+				log.Printf("%v", err)
+				return err
+			}
 			b.handlers[sIndex] = h
 		}
 	}
-	logger := h.logger
-	kinds := logger.Kinds
-	if len(kinds) != len(args) {
-		log.Printf("Number of args %d does not match log line %d", len(args), len(kinds))
+	writers := h.writers
+	if len(writers) != len(args) {
+		return fmt.Errorf("Number of args %d does not match log line %d", len(args), len(writers))
 	}
-	// just push the all arguments to the specified Writer
-	// TBD
+	for i, arg := range args {
+		// "writer" depends on the format code
+		writer := writers[i]
+		// unsafe pointer to the data depends on the data type
+		switch t := arg.(type) {
+		case int32:
+			i := arg.(int32)
+			writer.write(b.ioWriter, unsafe.Pointer(&i))
+		case int64:
+			i := arg.(int64)
+			writer.write(b.ioWriter, unsafe.Pointer(&i))
+		case int:
+			i := arg.(int)
+			writer.write(b.ioWriter, unsafe.Pointer(&i))
+		default:
+			return fmt.Errorf("Unsupported type: %T\n", t)
+		}
+
+	}
+	return nil
 }
 
-// Logger is the internal struct representing the runtime state of the loggers.
-// The Segs field is not used during logging; it is only used in the inflate
-// utility
-type Logger struct {
-	Kinds []reflect.Kind
-	Segs  []string
-}
-
-// the following is from https://github.com/larytet/procfs
-func parseLogLine(gold string) (Logger, []string) {
-	// make a copy we can destroy
+func parseLogLine(gold string) ([]writer, error) {
 	tmp := gold
 	f := &tmp
-	var kinds []reflect.Kind
-	var segs []string
-	var curseg []rune
+	writers := make([]writer, 0)
+	var r rune
+	var n int
 
 	for len(*f) > 0 {
-		if r := next(f); r != '%' {
-			curseg = append(curseg, r)
+		r, n = next(f)
+		if r == utf8.RuneError && n == 0 {
+			break
+		}
+		if r == utf8.RuneError {
+			return nil, fmt.Errorf("Can not handle '%c' in %s: rune error", r, gold)
+		}
+		if r != '%' {
 			continue
 		}
-
 		// Literal % sign
 		if peek(f) == '%' {
-			next(f)
-			curseg = append(curseg, '%')
 			continue
 		}
+		r, _ = next(f)
 
-		segs = append(segs, string(curseg))
-		curseg = curseg[:0]
-
-		var requireBrace bool
-
-		// Optional curly braces around format
-		r := next(f)
-		if r == '{' {
-			requireBrace = true
-			r = next(f)
-		}
-
-		// optimized parse tree
 		switch r {
-		case 'b':
-			kinds = append(kinds, reflect.Bool)
-
-		case 's':
-			kinds = append(kinds, reflect.String)
-
+		case 'x':
+			writers = append(writers, &writerByteArray{count: 8})
+		case 'd':
+			writers = append(writers, &writerByteArray{count: 8})
 		case 'i':
-			if len(*f) == 0 {
-				kinds = append(kinds, reflect.Int)
-				break
-			}
-
-			r := peek(f)
-			switch r {
-			case '8':
-				next(f)
-				kinds = append(kinds, reflect.Int8)
-
-			case '1':
-				next(f)
-				if next(f) != '6' {
-					logpanic("Was expecting i16.", gold)
-				}
-				kinds = append(kinds, reflect.Int16)
-
-			case '3':
-				next(f)
-				if next(f) != '2' {
-					logpanic("Was expecting i32.", gold)
-				}
-				kinds = append(kinds, reflect.Int32)
-
-			case '6':
-				next(f)
-				if next(f) != '4' {
-					logpanic("Was expecting i64.", gold)
-				}
-				kinds = append(kinds, reflect.Int64)
-
-			default:
-				kinds = append(kinds, reflect.Int)
-			}
-
+			writers = append(writers, &writerByteArray{count: 8})
 		case 'u':
-			if len(*f) == 0 {
-				kinds = append(kinds, reflect.Uint)
-				break
-			}
-
-			r := peek(f)
-			switch r {
-			case '8':
-				next(f)
-				kinds = append(kinds, reflect.Uint8)
-
-			case '1':
-				next(f)
-				if next(f) != '6' {
-					logpanic("Was expecting u16.", gold)
-				}
-				kinds = append(kinds, reflect.Uint16)
-
-			case '3':
-				next(f)
-				if next(f) != '2' {
-					logpanic("Was expecting u32.", gold)
-				}
-				kinds = append(kinds, reflect.Uint32)
-
-			case '6':
-				next(f)
-				if next(f) != '4' {
-					logpanic("Was expecting u64.", gold)
-				}
-				kinds = append(kinds, reflect.Uint64)
-
-			default:
-				kinds = append(kinds, reflect.Uint)
-			}
-
-		case 'f':
-			r := peek(f)
-			switch r {
-			case '3':
-				next(f)
-				if next(f) != '2' {
-					logpanic("Was expecting f32.", gold)
-				}
-				kinds = append(kinds, reflect.Float32)
-
-			case '6':
-				next(f)
-				if next(f) != '4' {
-					logpanic("Was expecting f64.", gold)
-				}
-				kinds = append(kinds, reflect.Float64)
-
-			default:
-				logpanic("Expecting either f32 or f64", gold)
-			}
-
+			writers = append(writers, &writerByteArray{count: 8})
 		case 'c':
-			r := peek(f)
-			switch r {
-			case '6':
-				next(f)
-				if next(f) != '4' {
-					logpanic("Was expecting c64.", gold)
-				}
-				kinds = append(kinds, reflect.Complex64)
-
-			case '1':
-				next(f)
-				if next(f) != '2' {
-					logpanic("Was expecting c128.", gold)
-				}
-				if next(f) != '8' {
-					logpanic("Was expecting c128.", gold)
-				}
-				kinds = append(kinds, reflect.Complex128)
-
-			default:
-				logpanic("Expecting either c64 or c128", gold)
-			}
-
+			writers = append(writers, &writerByteArray{count: 1})
 		default:
-			logpanic("Invalid replace sequence", gold)
+			return nil, fmt.Errorf("Can not handle '%c' in %s: unknown format code", r, gold)
 		}
 
-		if requireBrace {
-			if len(*f) == 0 {
-				logpanic("Missing '}' character at end of line", gold)
-			}
-			if next(f) != '}' {
-				logpanic("Missing '}' character", gold)
-			}
-		}
 	}
 
-	segs = append(segs, string(curseg))
-
-	return Logger{
-		Kinds: kinds,
-	}, segs
+	return writers, nil
 }
 
 func peek(s *string) rune {
 	r, _ := utf8.DecodeRuneInString(*s)
 
-	if r == utf8.RuneError {
-		panic("Malformed log string")
-	}
-
 	return r
 }
 
-func next(s *string) rune {
+func next(s *string) (rune, int) {
 	r, n := utf8.DecodeRuneInString(*s)
 	*s = (*s)[n:]
 
-	if r == utf8.RuneError {
-		panic("Malformed log string")
-	}
-
-	return r
-}
-
-func logpanic(msg, gold string) {
-	panic(fmt.Sprintf("Malformed log format string. %s.\n%s", msg, gold))
+	return r, n
 }
 
 func getTextAddressSize(maps []*maps.Maps) (constDataBase uint, constDataSize uint) {

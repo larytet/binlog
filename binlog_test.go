@@ -1,6 +1,9 @@
 package binlog
 
 import (
+	"bytes"
+	"encoding/binary"
+	"math/rand"
 	"reflect"
 	"testing"
 	"unsafe"
@@ -60,18 +63,40 @@ func TestStringLocationGlobalLocal(t *testing.T) {
 	}
 }
 
-func TestInit(t *testing.T) {
+func TestReadme(t *testing.T) {
+	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := Init(uint(constDataBase), uint(constDataSize))
-	binlog.PrintUint32("PrintUint32 %u", 10)
+	binlog := Init(&buf, uint(constDataBase), uint(constDataSize))
+	binlog.Log("Hello %u", 10)
+}
+
+func TestInt(t *testing.T) {
+	var buf bytes.Buffer
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	binlog := Init(&buf, uint(constDataBase), uint(constDataSize))
+	fmtString := "Hello %u"
+	rand.Seed(42)
+	value0 := rand.Int31()
+	binlog.Log(fmtString, value0)
+	var value1 int32
+	err := binary.Read(&buf, binary.LittleEndian, &value1) // bytes.NewBuffer(bufBytes)
+	if err != nil {
+		t.Fatalf("Failed to read back %v", err)
+	}
+	if value0 != value1 {
+		t.Fatalf("Wrong data %x expected %x", value1, value0)
+	}
 }
 
 func BenchmarkFifo(b *testing.B) {
-	binlog := Init(GetSelfTextAddressSize())
-	binlog.PrintUint32("PrintUint32 %u", 10)
+	var buf bytes.Buffer
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	fmtString := "Hello %u"
+	binlog := Init(&buf, constDataBase, constDataSize)
+	binlog.Log(fmtString, 10)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		binlog.PrintUint32("PrintUint32 %u", 10)
+		binlog.Log(fmtString, 10)
 	}
 }
