@@ -2,6 +2,8 @@ package binlog
 
 import (
 	"github.com/jandre/procfs"
+	"github.com/jandre/procfs/maps"
+	"github.com/jandre/procfs/statm"
 	"os"
 	"reflect"
 	"testing"
@@ -62,14 +64,20 @@ func TestStringLocationGlobalLocal(t *testing.T) {
 	}
 }
 
-type Statm struct {
-	Size     int64 // total program size (pages)(same as VmSize in status)
-	Resident int64 //size of memory portions (pages)(same as VmRSS in status)
-	Shared   int   // number of pages that are shared(i.e. backed by a file)
-	Trs      uint  // number of pages that are 'code'(not including libs; broken, includes data segment)
-	Lrs      int   //number of pages of library(always 0 on 2.6)
-	Drs      int   //number of pages of data/stack(including libs; broken, includes library text)
-	Dt       int   //number of dirty pages(always 0 on 2.6)
+func getTextAddressSize(s *statm.Statm, m []*maps.Maps) (constDataBase uint, constDataSize uint) {
+	constDataBase = uint(s.Trs)
+	constDataEnd := m[0].AddressEnd
+	moduleName := m[0].Pathname
+
+	for i := 1; i < len(m); i++ {
+		if moduleName != m[i].Pathname {
+			break
+		}
+		constDataEnd = m[i].AddressEnd
+	}
+
+	constDataSize = uint(constDataEnd) - constDataBase
+	return constDataBase, constDataSize
 }
 
 func TestInit(t *testing.T) {
@@ -86,8 +94,7 @@ func TestInit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Fail to read procfs/statm context %v", err)
 	}
-	constDataBase := statm.Trs
-	constDataSize := maps[0].AddressStart
+	constDataBase, constDataSize := getTextAddressSize(statm, maps)
 	binlog := Init(uint(constDataBase), uint(constDataSize))
 	binlog.PrintUint32("PrintUint32 %u", 10)
 }
