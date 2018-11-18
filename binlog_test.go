@@ -88,7 +88,20 @@ func TestInt(t *testing.T) {
 	}
 }
 
-func BenchmarkFifo(b *testing.B) {
+func BenchmarkEmptyString(b *testing.B) {
+	var buf bytes.Buffer
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	fmtString := "Hello"
+	binlog := Init(&buf, constDataBase, constDataSize)
+	binlog.Log(fmtString)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		binlog.Log(fmtString)
+	}
+}
+
+func BenchmarkSingleInt(b *testing.B) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	fmtString := "Hello %u"
