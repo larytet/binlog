@@ -75,7 +75,7 @@ type Statm struct {
 	Size     int64 // total program size (pages)(same as VmSize in status)
 	Resident int64 //size of memory portions (pages)(same as VmRSS in status)
 	Shared   int   // number of pages that are shared(i.e. backed by a file)
-	Trs      int   // number of pages that are 'code'(not including libs; broken, includes data segment)
+	Trs      uint  // number of pages that are 'code'(not including libs; broken, includes data segment)
 	Lrs      int   //number of pages of library(always 0 on 2.6)
 	Drs      int   //number of pages of data/stack(including libs; broken, includes library text)
 	Dt       int   //number of dirty pages(always 0 on 2.6)
@@ -151,7 +151,7 @@ func parseField(field interface{}, line string) error {
 	return nil
 }
 
-func getTextSize() (textSize int, err error) {
+func getTextSize() (textSize uint, err error) {
 	pid := os.Getpid()
 	path := fmt.Sprintf("/proc/%d/statm", pid)
 	buf, err := ioutil.ReadFile(path)
@@ -162,13 +162,14 @@ func getTextSize() (textSize int, err error) {
 	lines := strings.Split(string(buf), " ")
 	stat := &Statm{}
 	err = parseStringsIntoStruct(stat, lines)
-	return stat.Trs, err
+	return (4 * 1024 * stat.Trs), err
 
 }
 
 func TestInit(t *testing.T) {
 	var constDataBase uintptr
 	var constDataSize uint
+	constDataSize, err = uint(getTextSize())
 	binlog := Init(constDataBase, constDataSize)
 	binlog.PrintUint32("PrintUint32 %u", 10)
 }
