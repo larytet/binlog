@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/jandre/procfs"
 	"github.com/jandre/procfs/maps"
+	"log"
 	"os"
 	"reflect"
 	"testing"
@@ -86,18 +87,33 @@ func sprintfMaps(maps []*maps.Maps) string {
 	return s
 }
 
-func TestInit(t *testing.T) {
+func getSelfTextAddressSize() (constDataBase uint, constDataSize uint) {
 	selfPid := os.Getpid()
 	process, err := procfs.NewProcess(selfPid, true)
 	if err != nil {
-		t.Fatalf("Fail to read procfs context %v", err)
+		log.Fatalf("Fail to read procfs context %v", err)
 	}
 	maps, err := process.Maps()
 	if err != nil {
-		t.Fatalf("Fail to read procfs/maps context %v", err)
+		log.Fatalf("Fail to read procfs/maps context %v", err)
 	}
-	constDataBase, constDataSize := getTextAddressSize(maps)
-	t.Logf("get maps %v \n%x %d", sprintfMaps(maps), constDataBase, constDataSize)
+	return getTextAddressSize(maps)
+
+}
+
+func TestInit(t *testing.T) {
+	constDataBase, constDataSize := getSelfTextAddressSize()
 	binlog := Init(uint(constDataBase), uint(constDataSize))
 	binlog.PrintUint32("PrintUint32 %u", 10)
+}
+
+func BenchmarkFifo(b *testing.B) {
+	constDataBase, constDataSize := getSelfTextAddressSize()
+	binlog := Init(uint(constDataBase), uint(constDataSize))
+	binlog.PrintUint32("PrintUint32 %u", 10)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		binlog.PrintUint32("PrintUint32 %u", 10)
+	}
 }
