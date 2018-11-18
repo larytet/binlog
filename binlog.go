@@ -29,7 +29,8 @@ type Binlog struct {
 // constDataBase is an address of the initialzied const data, constDataSize is it's size
 func Init(constDataBase uint, constDataSize uint) *Binlog {
 	// allocate one handler more for handling default cases
-	binlog := &Binlog{constDataBase: constDataBase, constDataSize: constDataSize, handlers: make([]*handler, constDataSize+1)}
+	handlers := make([]*handler, constDataSize+1)
+	binlog := &Binlog{constDataBase: constDataBase, constDataSize: constDataSize, handlers: handlers}
 	return binlog
 }
 

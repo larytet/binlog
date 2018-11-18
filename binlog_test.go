@@ -1,6 +1,7 @@
 package binlog
 
 import (
+	"fmt"
 	"github.com/jandre/procfs"
 	"github.com/jandre/procfs/maps"
 	"github.com/jandre/procfs/statm"
@@ -64,20 +65,28 @@ func TestStringLocationGlobalLocal(t *testing.T) {
 	}
 }
 
-func getTextAddressSize(s *statm.Statm, m []*maps.Maps) (constDataBase uint, constDataSize uint) {
-	constDataBase = uint(s.Trs)
-	constDataEnd := m[0].AddressEnd
-	moduleName := m[0].Pathname
+func getTextAddressSize(statm *statm.Statm, maps []*maps.Maps) (constDataBase uint, constDataSize uint) {
+	constDataBase = uint(statm.Trs)
+	constDataEnd := maps[0].AddressEnd
+	moduleName := maps[0].Pathname
 
-	for i := 1; i < len(m); i++ {
-		if moduleName != m[i].Pathname {
+	for i := 1; i < len(maps); i++ {
+		if moduleName != maps[i].Pathname {
 			break
 		}
-		constDataEnd = m[i].AddressEnd
+		constDataEnd = maps[i].AddressEnd
 	}
 
 	constDataSize = uint(constDataEnd) - constDataBase
 	return constDataBase, constDataSize
+}
+
+func sprintfMaps(maps []*maps.Maps) string {
+	s := ""
+	for _, m := range maps {
+		s = s + fmt.Sprintf("\n%v", (*m))
+	}
+	return s
 }
 
 func TestInit(t *testing.T) {
@@ -95,6 +104,7 @@ func TestInit(t *testing.T) {
 		t.Fatalf("Fail to read procfs/statm context %v", err)
 	}
 	constDataBase, constDataSize := getTextAddressSize(statm, maps)
-	binlog := Init(uint(constDataBase), uint(constDataSize))
-	binlog.PrintUint32("PrintUint32 %u", 10)
+	//binlog := Init(uint(constDataBase), uint(constDataSize))
+	//binlog.PrintUint32("PrintUint32 %u", 10)
+	t.Fatalf("get maps %v", sprintfMaps(maps))
 }
