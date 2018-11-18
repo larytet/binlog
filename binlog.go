@@ -54,7 +54,7 @@ func (b *Binlog) PrintUint32(s string, args ...uint32) {
 		h = b.handlers[sIndex]
 		if b.handlers[sIndex] == nil { // cache miss?
 			b.addHandler(s)
-			handler = b.handlers[sIndex]
+			h = b.handlers[sIndex]
 		}
 	}
 }
