@@ -103,7 +103,7 @@ func TestInit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Fail to read procfs/statm context %v", err)
 	}
-	constDataBase, constDataSize := getTextAddressSize(statm, maps)
+	// constDataBase, constDataSize := getTextAddressSize(statm, maps)
 	//binlog := Init(uint(constDataBase), uint(constDataSize))
 	//binlog.PrintUint32("PrintUint32 %u", 10)
 	t.Fatalf("get maps %v", sprintfMaps(maps))
