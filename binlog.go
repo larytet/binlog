@@ -92,13 +92,15 @@ func (b *Binlog) createHandler(fmt string) (*handler, error) {
 	return &h, err
 }
 
+// My hashtable is trivial: address of the string is an index in the array of handlers
+// I assume that all strings are allocated in the same text section of the executable
 func (b *Binlog) getHandler(fmtStr string) (*handler, error) {
 	var h *handler = &defaultHandler
 	var err error
 	sIndex := b.getStringIndex(fmtStr)
 	if sIndex != b.constDataSize {
 		h = b.handlers[sIndex]
-		if h == nil { // cache miss?
+		if h == nil { // hashtable miss?
 			h, err = b.createHandler(fmtStr)
 			if err != nil {
 				log.Printf("%v", err)
