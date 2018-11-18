@@ -79,9 +79,15 @@ func TestInit(t *testing.T) {
 		t.Fatalf("Fail to read procfs context %v", err)
 	}
 	maps, err := process.Maps()
+	if err != nil {
+		t.Fatalf("Fail to read procfs/maps context %v", err)
+	}
 	statm, err := process.Statm()
+	if err != nil {
+		t.Fatalf("Fail to read procfs/statm context %v", err)
+	}
 	constDataBase := statm.Trs
 	constDataSize := maps[0].AddressStart
-	binlog := Init(uintptr(constDataBase), uint(constDataSize))
+	binlog := Init(uint(constDataBase), uint(constDataSize))
 	binlog.PrintUint32("PrintUint32 %u", 10)
 }

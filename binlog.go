@@ -2,50 +2,59 @@ package binlog
 
 // Based on the idea https://github.com/ScottMansfield/nanolog/issues/4
 import (
-	"fmt"
+	"log"
+	"reflect"
+	"unsafe"
 	//"runtime"
 	//	"os"
 )
 
-// typedef int (*intFunc) ();
-//
-// int
-// bridge_int_func(intFunc f)
-// {
-//		return f();
-// }
-//
-// int fortytwo()
-// {
-//	    return 42;
-// }
-import "C"
-
-type Binlog struct {
-	constDataBase uintptr
-	constDataSize uint
+type handler struct {
+	formatString string
 }
 
-// moduledata is a dead end?
-// See https://stackoverflow.com/questions/48445593/go-function-definition-in-another-package
-// https://golang.org/cmd/cgo/#hdr-Go_references_to_C
-////go:noescape
-////go:linkname runtime_firstmoduledata runtime.firstmoduledata
-//var Runtime_firstmoduledata uintptr
+var defaultHandler handler
 
-// Straight from https://github.com/larytet/restartable/blob/master/restartable.go
-// and https://golang.org/src/runtime/symtab.go?m=text
-// See also https://stackoverflow.com/questions/37251108/golang-fetch-all-all-filepathes-from-compiled-file
-// https://blog.altoros.com/golang-internals-part-6-bootstrapping-and-memory-allocator-initialization.html
-// http://www.alangpierce.com/blog/2016/03/17/adventures-in-go-accessing-unexported-functions/
+type Binlog struct {
+	constDataBase uint
+	constDataSize uint
+	handlers      []*handler
+}
 
 // constDataBase is an address of the initialzied const data, constDataSize is it's size
-func Init(constDataBase uintptr, constDataSize uint) *Binlog {
-	binlog := &Binlog{constDataBase: constDataBase, constDataSize: constDataSize}
+func Init(constDataBase uint, constDataSize uint) *Binlog {
+	// allocate one handler more for handling default cases
+	binlog := &Binlog{constDataBase: constDataBase, constDataSize: constDataSize, handlers: make([]*handler, constDataSize+1)}
 	return binlog
 }
 
+func (b *Binlog) getStringIndex(s string) uint {
+	sHeader := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	sData := sHeader.Data
+	sDataOffset := uint(sData) - b.constDataBase
+	if sDataOffset < b.constDataSize {
+		return sDataOffset / 8
+	} else {
+		log.Printf("String %x is out of address range %x-%x", sHeader.Data, b.constDataBase, b.constDataBase+b.constDataSize)
+		return b.constDataSize
+	}
+
+}
+
+func (b *Binlog) addHandler(s string) {
+	var h handler
+	h.formatString = s
+}
+
+// All arguments are uint32
 func (b *Binlog) PrintUint32(s string, args ...uint32) {
-	f := C.intFunc(C.fortytwo)
-	fmt.Println(int(C.bridge_int_func(f)))
+	var h *handler = &defaultHandler
+	sIndex := b.getStringIndex(s)
+	if sIndex != b.constDataSize {
+		h = b.handlers[sIndex]
+		if b.handlers[sIndex] == nil { // cache miss?
+			b.addHandler(s)
+			handler = b.handlers[sIndex]
+		}
+	}
 }
