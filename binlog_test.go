@@ -5,6 +5,8 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 	"unsafe"
 )
@@ -106,6 +108,49 @@ func parseStringsIntoStruct(vi interface{}, strs []string) error {
 	return nil
 }
 
+func parseField(field interface{}, line string) error {
+	switch field := field.(type) {
+	case *int:
+		val, err := strconv.Atoi(line)
+		if err != nil {
+			return err
+		}
+		*field = val
+	case *int64:
+		val, err := strconv.ParseInt(line, 10, 64)
+		if err != nil {
+			return err
+		}
+		*field = val
+	case *uint64:
+		val, err := strconv.ParseUint(line, 10, 64)
+		if err != nil {
+			return err
+		}
+		*field = val
+	case *string:
+		*field = line
+
+		/*
+			case *time.Time:
+				jiffies, err := strconv.ParseInt(line, 10, 64)
+				if err != nil {
+					return err
+				}
+				*field = jiffiesToTime(jiffies)
+			case *time.Duration:
+				jiffies, err := strconv.ParseInt(line, 10, 64)
+				if err != nil {
+					return nil
+				}
+				*field = jiffiesToDuration(jiffies)
+		*/
+	default:
+		return fmt.Errorf("unsupported field type %T", field)
+	}
+	return nil
+}
+
 func getTextSize() (textSize int, err error) {
 	pid := os.Getpid()
 	path := fmt.Sprintf("/proc/%d/statm", pid)
@@ -116,7 +161,7 @@ func getTextSize() (textSize int, err error) {
 
 	lines := strings.Split(string(buf), " ")
 	stat := &Statm{}
-	err = util.ParseStringsIntoStruct(stat, lines)
+	err = parseStringsIntoStruct(stat, lines)
 	return stat.Trs, err
 
 }
@@ -125,4 +170,5 @@ func TestInit(t *testing.T) {
 	var constDataBase uintptr
 	var constDataSize uint
 	binlog := Init(constDataBase, constDataSize)
+	binlog.PrintUint32("PrintUint32 %u", 10)
 }

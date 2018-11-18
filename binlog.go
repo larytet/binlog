@@ -31,6 +31,6 @@ func Init(constDataBase uintptr, constDataSize uint) *Binlog {
 	return binlog
 }
 
-func PrintUint32(s string, args ...uint32) {
+func (b *Binlog) PrintUint32(s string, args ...uint32) {
 
 }
