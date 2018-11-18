@@ -175,8 +175,7 @@ func getTextAddress(textAddress uintptr, err error) {
 
 func TestInit(t *testing.T) {
 	var constDataBase uintptr
-	var constDataSize uint
-	constDataSize, err = uint(getTextSize())
-	binlog := Init(constDataBase, constDataSize)
+	constDataSize, _ := getTextSize()
+	binlog := Init(constDataBase, uint(constDataSize))
 	binlog.PrintUint32("PrintUint32 %u", 10)
 }

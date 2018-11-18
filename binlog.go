@@ -2,10 +2,24 @@ package binlog
 
 // Based on the idea https://github.com/ScottMansfield/nanolog/issues/4
 import (
-//	"C"
-//"runtime"
-//	"os"
+	"fmt"
+	//"runtime"
+	//	"os"
 )
+
+// typedef int (*intFunc) ();
+//
+// int
+// bridge_int_func(intFunc f)
+// {
+//		return f();
+// }
+//
+// int fortytwo()
+// {
+//	    return 42;
+// }
+import "C"
 
 type Binlog struct {
 	constDataBase uintptr
@@ -32,5 +46,6 @@ func Init(constDataBase uintptr, constDataSize uint) *Binlog {
 }
 
 func (b *Binlog) PrintUint32(s string, args ...uint32) {
-
+	f := C.intFunc(C.fortytwo)
+	fmt.Println(int(C.bridge_int_func(f)))
 }
