@@ -12,3 +12,5 @@ This is likely the fastest possible implementation of a log in Golang or close t
 	
 	
 Linux only. Relies on the fact the strings in Go are located in the same ELF file segment. 
+The performance of the API is on par with C++ binary logs like https://github.com/PlatformLab/NanoLog 
+The original idea is https://github.com/ScottMansfield/nanolog/issues/4
