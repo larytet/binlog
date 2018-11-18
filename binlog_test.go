@@ -1,13 +1,9 @@
 package binlog
 
 import (
-	"fmt"
 	"github.com/jandre/procfs"
-	"io/ioutil"
 	"os"
 	"reflect"
-	"strconv"
-	"strings"
 	"testing"
 	"unsafe"
 )
@@ -66,12 +62,6 @@ func TestStringLocationGlobalLocal(t *testing.T) {
 	}
 }
 
-func getMyPath() (path string, err error) {
-	pid := os.Getpid()
-	path = fmt.Sprintf("/proc/%d/exe", pid)
-	return os.Readlink(path)
-}
-
 type Statm struct {
 	Size     int64 // total program size (pages)(same as VmSize in status)
 	Resident int64 //size of memory portions (pages)(same as VmRSS in status)
@@ -83,8 +73,15 @@ type Statm struct {
 }
 
 func TestInit(t *testing.T) {
-	var constDataBase uintptr
-	constDataSize, _ := getTextSize()
-	binlog := Init(constDataBase, uint(constDataSize))
+	selfPid := os.Getpid()
+	process, err := procfs.NewProcess(selfPid, true)
+	if err != nil {
+		t.Fatalf("Fail to read procfs context %v", err)
+	}
+	maps, err := process.Maps()
+	statm, err := process.Statm()
+	constDataBase := statm.Trs
+	constDataSize := maps[0].AddressStart
+	binlog := Init(uintptr(constDataBase), uint(constDataSize))
 	binlog.PrintUint32("PrintUint32 %u", 10)
 }
