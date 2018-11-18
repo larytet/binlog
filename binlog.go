@@ -81,7 +81,6 @@ func (b *Binlog) getStringIndex(s string) uint {
 		log.Printf("String %x is out of address range %x-%x", sData, b.constDataBase, b.constDataBase+b.constDataSize*ALIGNMENT)
 		return b.constDataSize
 	}
-
 }
 
 func (b *Binlog) createHandler(fmt string) (*handler, error) {
@@ -93,10 +92,9 @@ func (b *Binlog) createHandler(fmt string) (*handler, error) {
 	return &h, err
 }
 
-// similar to fmt.Printf()
-func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
-	var err error
+func (b *Binlog) getHandler(fmtStr string) (*handler, error) {
 	var h *handler = &defaultHandler
+	var err error
 	sIndex := b.getStringIndex(fmtStr)
 	if sIndex != b.constDataSize {
 		h = b.handlers[sIndex]
@@ -104,10 +102,19 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 			h, err = b.createHandler(fmtStr)
 			if err != nil {
 				log.Printf("%v", err)
-				return err
+				return nil, err
 			}
 			b.handlers[sIndex] = h
 		}
+	}
+	return h, nil
+}
+
+// similar to fmt.Printf()
+func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
+	h, err := b.getHandler(fmtStr)
+	if err != nil {
+		return err
 	}
 	writers := h.writers
 	if len(writers) != len(args) {
