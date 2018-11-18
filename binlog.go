@@ -2,22 +2,21 @@ package binlog
 
 // Based on the idea https://github.com/ScottMansfield/nanolog/issues/4
 import (
-	//	"C"
-	"log"
-	//"runtime"
-	//	"os"
-	"unsafe"
+//	"C"
+//"runtime"
+//	"os"
 )
 
 type Binlog struct {
-	baseOffset uintptr
+	constDataBase uintptr
+	constDataSize uint
 }
 
 // moduledata is a dead end?
 // See https://stackoverflow.com/questions/48445593/go-function-definition-in-another-package
 // https://golang.org/cmd/cgo/#hdr-Go_references_to_C
-//go:noescape
-//go:linkname runtime_firstmoduledata runtime.firstmoduledata
+////go:noescape
+////go:linkname runtime_firstmoduledata runtime.firstmoduledata
 //var Runtime_firstmoduledata uintptr
 
 // Straight from https://github.com/larytet/restartable/blob/master/restartable.go
@@ -26,18 +25,10 @@ type Binlog struct {
 // https://blog.altoros.com/golang-internals-part-6-bootstrapping-and-memory-allocator-initialization.html
 // http://www.alangpierce.com/blog/2016/03/17/adventures-in-go-accessing-unexported-functions/
 
-func Init() *Binlog {
-	var firstmoduledata *moduledata = (*moduledata)(unsafe.Pointer(&runtime_firstmoduledata))
-	for md := firstmoduledata; md != nil; md = md.next {
-		if md.bad {
-			continue
-		}
-		data := md.noptrdata
-		log.Printf("%v", data)
-	}
-	var binlog Binlog
-
-	return &binlog
+// constDataBase is an address of the initialzied const data, constDataSize is it's size
+func Init(constDataBase uintptr, constDataSize uint) *Binlog {
+	binlog := &Binlog{constDataBase: constDataBase, constDataSize: constDataSize}
+	return binlog
 }
 
 func PrintUint32(s string, args ...uint32) {

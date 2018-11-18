@@ -1,6 +1,9 @@
 package binlog
 
 import (
+	"fmt"
+	"io/ioutil"
+	"os"
 	"reflect"
 	"testing"
 	"unsafe"
@@ -60,6 +63,66 @@ func TestStringLocationGlobalLocal(t *testing.T) {
 	}
 }
 
+func getMyPath() (path string, err error) {
+	pid := os.Getpid()
+	path := fmt.Sprintf("/proc/%d/exe", pid)
+	return os.Readlink(path)
+}
+
+type Statm struct {
+	Size     int64 // total program size (pages)(same as VmSize in status)
+	Resident int64 //size of memory portions (pages)(same as VmRSS in status)
+	Shared   int   // number of pages that are shared(i.e. backed by a file)
+	Trs      int   // number of pages that are 'code'(not including libs; broken, includes data segment)
+	Lrs      int   //number of pages of library(always 0 on 2.6)
+	Drs      int   //number of pages of data/stack(including libs; broken, includes library text)
+	Dt       int   //number of dirty pages(always 0 on 2.6)
+}
+
+// This straight from https://github.com/jandre/procfs/blob/master/util/structparser.go
+// ParseStringsIntoStruct expects a pointer to a struct as its
+// first argument. It assigns each element from the lines slice
+// sequentially to the struct members, parsing each according to
+// type. It currently accepts fields of type int, int64, string
+// and time.Time (it assumes that values of the latter kind
+// are formatted as a clock-tick count since the system start).
+//
+// Extra lines are ignored.
+//
+func parseStringsIntoStruct(vi interface{}, strs []string) error {
+	v := reflect.ValueOf(vi).Elem()
+	typeOf := v.Type()
+
+	for i := 0; i < v.NumField(); i++ {
+		if i > len(strs) {
+			break
+		}
+		str := strings.TrimSpace(strs[i])
+		interf := v.Field(i).Addr().Interface()
+		if err := parseField(interf, str); err != nil {
+			return fmt.Errorf("cannot parse field %s=%q: %v", typeOf.Field(i).Name, str, err)
+		}
+	}
+	return nil
+}
+
+func getTextSize() (textSize int, err error) {
+	pid := os.Getpid()
+	path := fmt.Sprintf("/proc/%d/statm", pid)
+	buf, err := ioutil.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+
+	lines := strings.Split(string(buf), " ")
+	stat := &Statm{}
+	err = util.ParseStringsIntoStruct(stat, lines)
+	return stat.Trs, err
+
+}
+
 func TestInit(t *testing.T) {
-	Init()
+	var constDataBase uintptr
+	var constDataSize uint
+	binlog := Init(constDataBase, constDataSize)
 }
