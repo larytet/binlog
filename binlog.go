@@ -93,6 +93,7 @@ func (b *Binlog) createHandler(fmt string) (*handler, error) {
 	return &h, err
 }
 
+// similar to fmt.Printf()
 func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 	var err error
 	var h *handler = &defaultHandler
