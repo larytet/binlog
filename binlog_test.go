@@ -166,6 +166,10 @@ func getTextSize() (textSize uint, err error) {
 
 }
 
+// see https://www.cyberciti.biz/faq/linux-viewing-process-address-space-command/
+func getTextAddress(textAddress uintptr, err error) {
+}
+
 func TestInit(t *testing.T) {
 	var constDataBase uintptr
 	var constDataSize uint
