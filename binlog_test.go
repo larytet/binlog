@@ -65,6 +65,14 @@ func TestStringLocationGlobalLocal(t *testing.T) {
 	}
 }
 
+func sprintfMaps(maps []*maps.Maps) string {
+	s := ""
+	for _, m := range maps {
+		s = s + fmt.Sprintf("\n%v", (*m))
+	}
+	return s
+}
+
 func getTextAddressSize(maps []*maps.Maps) (constDataBase uint, constDataSize uint) {
 	s := "TestString"
 	sAddress := uint(getStringAdress(s))
@@ -77,14 +85,6 @@ func getTextAddressSize(maps []*maps.Maps) (constDataBase uint, constDataSize ui
 	}
 
 	return 0, 0
-}
-
-func sprintfMaps(maps []*maps.Maps) string {
-	s := ""
-	for _, m := range maps {
-		s = s + fmt.Sprintf("\n%v", (*m))
-	}
-	return s
 }
 
 func getSelfTextAddressSize() (constDataBase uint, constDataSize uint) {

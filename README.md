@@ -18,6 +18,21 @@ The original idea is https://github.com/ScottMansfield/nanolog/issues/4
 Example:
 
 ```Go
+
+func getTextAddressSize(maps []*maps.Maps) (constDataBase uint, constDataSize uint) {
+	s := "TestString"
+	sAddress := uint(getStringAdress(s))
+	for i := 0; i < len(maps); i++ {
+		start := uint(maps[i].AddressStart)
+		end := uint(maps[i].AddressEnd)
+		if (sAddress >= start) && (sAddress <= end) {
+			return start, end - start
+		}
+	}
+
+	return 0, 0
+}
+
 func getSelfTextAddressSize() (constDataBase uint, constDataSize uint) {
 	selfPid := os.Getpid()
 	process, err := procfs.NewProcess(selfPid, true)
