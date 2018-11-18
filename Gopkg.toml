@@ -28,7 +28,7 @@
 [[constraint]]
   name = "github.com/jandre/procfs"
   source = "github.com/larytet/procfs"
-  branch = "master"
+  branch = "maps"
 
 [prune]
   go-tests = true

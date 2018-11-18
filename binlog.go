@@ -26,22 +26,29 @@ type Binlog struct {
 	currentIndex  uint32
 }
 
+const ALIGNMENT uint = 8
+
 // constDataBase is an address of the initialzied const data, constDataSize is it's size
 func Init(constDataBase uint, constDataSize uint) *Binlog {
 	// allocate one handler more for handling default cases
+	constDataSize = constDataSize / ALIGNMENT
 	handlers := make([]*handler, constDataSize+1)
 	binlog := &Binlog{constDataBase: constDataBase, constDataSize: constDataSize, handlers: handlers}
 	return binlog
 }
 
-func (b *Binlog) getStringIndex(s string) uint {
+func getStringAdress(s string) uintptr {
 	sHeader := (*reflect.StringHeader)(unsafe.Pointer(&s))
-	sData := sHeader.Data
+	return sHeader.Data
+}
+
+func (b *Binlog) getStringIndex(s string) uint {
+	sData := getStringAdress(s)
 	sDataOffset := uint(sData) - b.constDataBase
 	if sDataOffset < b.constDataSize {
-		return sDataOffset / 8
+		return sDataOffset / ALIGNMENT
 	} else {
-		log.Printf("String %x is out of address range %x-%x", sHeader.Data, b.constDataBase, b.constDataBase+b.constDataSize)
+		log.Printf("String %x is out of address range %x-%x", sData, b.constDataBase, b.constDataBase+b.constDataSize)
 		return b.constDataSize
 	}
 
@@ -68,7 +75,7 @@ func (b *Binlog) PrintUint32(fmt string, args ...uint32) {
 	}
 	kinds := h.logger.Kinds
 	if len(kinds) != len(args) {
-		panic("Number of args does not match log line")
+		log.Printf("Number of args %d does not match log line %d", len(args), len(kinds))
 	}
 }
 

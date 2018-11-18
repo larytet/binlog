@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/jandre/procfs"
 	"github.com/jandre/procfs/maps"
-	"github.com/jandre/procfs/statm"
 	"os"
 	"reflect"
 	"testing"
@@ -65,20 +64,18 @@ func TestStringLocationGlobalLocal(t *testing.T) {
 	}
 }
 
-func getTextAddressSize(statm *statm.Statm, maps []*maps.Maps) (constDataBase uint, constDataSize uint) {
-	constDataBase = uint(statm.Trs)
-	constDataEnd := maps[0].AddressEnd
-	moduleName := maps[0].Pathname
-
-	for i := 1; i < len(maps); i++ {
-		if moduleName != maps[i].Pathname {
-			break
+func getTextAddressSize(maps []*maps.Maps) (constDataBase uint, constDataSize uint) {
+	s := "TestString"
+	sAddress := uint(getStringAdress(s))
+	for i := 0; i < len(maps); i++ {
+		start := uint(maps[i].AddressStart)
+		end := uint(maps[i].AddressEnd)
+		if (sAddress >= start) && (sAddress <= end) {
+			return start, end - start
 		}
-		constDataEnd = maps[i].AddressEnd
 	}
 
-	constDataSize = uint(constDataEnd) - constDataBase
-	return constDataBase, constDataSize
+	return 0, 0
 }
 
 func sprintfMaps(maps []*maps.Maps) string {
@@ -99,12 +96,8 @@ func TestInit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Fail to read procfs/maps context %v", err)
 	}
-	statm, err := process.Statm()
-	if err != nil {
-		t.Fatalf("Fail to read procfs/statm context %v", err)
-	}
-	// constDataBase, constDataSize := getTextAddressSize(statm, maps)
-	//binlog := Init(uint(constDataBase), uint(constDataSize))
-	//binlog.PrintUint32("PrintUint32 %u", 10)
-	t.Fatalf("get maps %v", sprintfMaps(maps))
+	constDataBase, constDataSize := getTextAddressSize(maps)
+	t.Logf("get maps %v \n%x %d", sprintfMaps(maps), constDataBase, constDataSize)
+	binlog := Init(uint(constDataBase), uint(constDataSize))
+	binlog.PrintUint32("PrintUint32 %u", 10)
 }
