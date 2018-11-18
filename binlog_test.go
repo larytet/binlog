@@ -67,8 +67,7 @@ func TestInit(t *testing.T) {
 }
 
 func BenchmarkFifo(b *testing.B) {
-	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := Init(uint(constDataBase), uint(constDataSize))
+	binlog := Init(GetSelfTextAddressSize())
 	binlog.PrintUint32("PrintUint32 %u", 10)
 	b.ResetTimer()
 
