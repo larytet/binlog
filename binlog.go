@@ -78,6 +78,8 @@ func (b *Binlog) PrintUint32(fmt string, args ...uint32) {
 	if len(kinds) != len(args) {
 		log.Printf("Number of args %d does not match log line %d", len(args), len(kinds))
 	}
+	// just push the all arguments to the specified Writer
+	// TBD
 }
 
 // Logger is the internal struct representing the runtime state of the loggers.
