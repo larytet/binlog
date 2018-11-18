@@ -44,9 +44,9 @@ func getStringAdress(s string) uintptr {
 
 func (b *Binlog) getStringIndex(s string) uint {
 	sData := getStringAdress(s)
-	sDataOffset := uint(sData) - b.constDataBase
+	sDataOffset := (uint(sData) - b.constDataBase) / ALIGNMENT
 	if sDataOffset < b.constDataSize {
-		return sDataOffset / ALIGNMENT
+		return sDataOffset
 	} else {
 		log.Printf("String %x is out of address range %x-%x", sData, b.constDataBase, b.constDataBase+b.constDataSize*ALIGNMENT)
 		return b.constDataSize
@@ -54,12 +54,12 @@ func (b *Binlog) getStringIndex(s string) uint {
 
 }
 
-func (b *Binlog) addHandler(fmt string) {
+func (b *Binlog) addHandler(fmt string) *handler {
 	var h handler
 	h.index = atomic.AddUint32(&b.currentIndex, 1) // If I want to start from zero I can add (-1)
 	h.formatString = fmt
 	h.logger, h.segs = parseLogLine(fmt)
-	b.handlers[h.index] = &h
+	return &h
 }
 
 // All arguments are uint32
@@ -68,12 +68,13 @@ func (b *Binlog) PrintUint32(fmt string, args ...uint32) {
 	sIndex := b.getStringIndex(fmt)
 	if sIndex != b.constDataSize {
 		h = b.handlers[sIndex]
-		if b.handlers[sIndex] == nil { // cache miss?
-			b.addHandler(fmt)
-			h = b.handlers[sIndex]
+		if h == nil { // cache miss?
+			h = b.addHandler(fmt)
+			b.handlers[sIndex] = h
 		}
 	}
-	kinds := h.logger.Kinds
+	logger := h.logger
+	kinds := logger.Kinds
 	if len(kinds) != len(args) {
 		log.Printf("Number of args %d does not match log line %d", len(args), len(kinds))
 	}
