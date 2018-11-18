@@ -2,6 +2,7 @@ package binlog
 
 import (
 	"fmt"
+	"github.com/jandre/procfs"
 	"io/ioutil"
 	"os"
 	"reflect"
@@ -79,98 +80,6 @@ type Statm struct {
 	Lrs      int   //number of pages of library(always 0 on 2.6)
 	Drs      int   //number of pages of data/stack(including libs; broken, includes library text)
 	Dt       int   //number of dirty pages(always 0 on 2.6)
-}
-
-// This straight from https://github.com/jandre/procfs/blob/master/util/structparser.go
-// ParseStringsIntoStruct expects a pointer to a struct as its
-// first argument. It assigns each element from the lines slice
-// sequentially to the struct members, parsing each according to
-// type. It currently accepts fields of type int, int64, string
-// and time.Time (it assumes that values of the latter kind
-// are formatted as a clock-tick count since the system start).
-//
-// Extra lines are ignored.
-//
-func parseStringsIntoStruct(vi interface{}, strs []string) error {
-	v := reflect.ValueOf(vi).Elem()
-	typeOf := v.Type()
-
-	for i := 0; i < v.NumField(); i++ {
-		if i > len(strs) {
-			break
-		}
-		str := strings.TrimSpace(strs[i])
-		interf := v.Field(i).Addr().Interface()
-		if err := parseField(interf, str); err != nil {
-			return fmt.Errorf("cannot parse field %s=%q: %v", typeOf.Field(i).Name, str, err)
-		}
-	}
-	return nil
-}
-
-func parseField(field interface{}, line string) error {
-	switch field := field.(type) {
-	case *int:
-		val, err := strconv.Atoi(line)
-		if err != nil {
-			return err
-		}
-		*field = val
-	case *int64:
-		val, err := strconv.ParseInt(line, 10, 64)
-		if err != nil {
-			return err
-		}
-		*field = val
-	case *uint64:
-		val, err := strconv.ParseUint(line, 10, 64)
-		if err != nil {
-			return err
-		}
-		*field = val
-	case *string:
-		*field = line
-
-		/*
-			case *time.Time:
-				jiffies, err := strconv.ParseInt(line, 10, 64)
-				if err != nil {
-					return err
-				}
-				*field = jiffiesToTime(jiffies)
-			case *time.Duration:
-				jiffies, err := strconv.ParseInt(line, 10, 64)
-				if err != nil {
-					return nil
-				}
-				*field = jiffiesToDuration(jiffies)
-		*/
-	default:
-		return fmt.Errorf("unsupported field type %T", field)
-	}
-	return nil
-}
-
-// see https://unix.stackexchange.com/questions/224015/memory-usage-of-a-given-process-using-linux-proc-filesystem
-// https://www.cyberciti.biz/faq/linux-viewing-process-address-space-command/
-// https://www.dennyzhang.com/check_process
-// I need /proc/self/maps, /proc/self/status, /proc/self/statm
-func getTextSize() (textSize uint, err error) {
-	pid := os.Getpid()
-	path := fmt.Sprintf("/proc/%d/statm", pid)
-	buf, err := ioutil.ReadFile(path)
-	if err != nil {
-		return 0, err
-	}
-
-	lines := strings.Split(string(buf), " ")
-	stat := &Statm{}
-	err = parseStringsIntoStruct(stat, lines)
-	return (4 * 1024 * stat.Trs), err
-
-}
-
-func getTextAddress(textAddress uintptr, err error) {
 }
 
 func TestInit(t *testing.T) {
