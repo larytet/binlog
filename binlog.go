@@ -120,11 +120,11 @@ func (b *Binlog) getStringIndex(s string) (uint, error) {
 	}
 }
 
-func (b *Binlog) createHandler(fmtStr string) (*handler, error) {
+func (b *Binlog) createHandler(fmtStr string, args ...interface{}) (*handler, error) {
 	var h handler
 	h.fmtString = fmtStr
 	var err error
-	h.writers, h.segs, err = parseLogLine(fmtStr)
+	h.writers, h.segs, err = parseLogLine(fmtStr, args)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +149,7 @@ func (b *Binlog) createHandler(fmtStr string) (*handler, error) {
 // My hashtable is trivial: address of the string is an index in the array of handlers
 // I assume that all strings are allocated in the same text section of the executable
 // If this is not the case I try to use a map (slower)
-func (b *Binlog) getHandler(fmtStr string) (*handler, error) {
+func (b *Binlog) getHandler(fmtStr string, args ...interface{}) (*handler, error) {
 	var h *handler = &defaultHandler
 	var err error
 	var sIndex uint
@@ -157,7 +157,7 @@ func (b *Binlog) getHandler(fmtStr string) (*handler, error) {
 	if sIndex != b.constDataSize {
 		h = b.handlersArray[sIndex]
 		if h == nil { // hashtable miss?
-			h, err = b.createHandler(fmtStr)
+			h, err = b.createHandler(fmtStr, args)
 			if err != nil {
 				log.Printf("%v", err)
 				return nil, err
@@ -167,7 +167,7 @@ func (b *Binlog) getHandler(fmtStr string) (*handler, error) {
 	} else {
 		var ok bool
 		if h, ok = b.handlersMap[fmtStr]; !ok {
-			h, err = b.createHandler(fmtStr)
+			h, err = b.createHandler(fmtStr, args)
 			if err != nil {
 				log.Printf("%v", err)
 				return nil, err
@@ -181,7 +181,7 @@ func (b *Binlog) getHandler(fmtStr string) (*handler, error) {
 
 // similar to fmt.Printf()
 func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
-	h, err := b.getHandler(fmtStr)
+	h, err := b.getHandler(fmtStr, args)
 	if err != nil {
 		return err
 	}
@@ -295,7 +295,7 @@ func (b *Binlog) Print(reader io.Reader) (bytes.Buffer, error) {
 	return out, nil
 }
 
-func parseLogLine(gold string) ([]writer, []rune, error) {
+func parseLogLine(gold string, args ...interface{}) ([]writer, []rune, error) {
 	tmp := gold
 	f := &tmp
 	writers := make([]writer, 0)

@@ -35,3 +35,8 @@ More benchmark for different logging frameworks (tip: NOP loggers which do nothi
 
 * https://gist.github.com/Avinash-Bhat/48c4f06b0cc840d9fd6c
 * https://stackoverflow.com/questions/10571182/go-disable-a-log-logger
+
+Golang related stuff 
+
+* https://github.com/golang/go/issues/28864
+
