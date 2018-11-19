@@ -3,6 +3,7 @@ package binlog
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -67,24 +68,61 @@ func TestReadme(t *testing.T) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	binlog := Init(&buf, uint(constDataBase), uint(constDataSize))
-	binlog.Log("Hello %u", 10)
+	binlog.Log("Hello %d", 10)
 }
 
 func TestInt(t *testing.T) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	binlog := Init(&buf, uint(constDataBase), uint(constDataSize))
-	fmtString := "Hello %u"
+	fmtString := "Hello %d"
 	rand.Seed(42)
 	value0 := rand.Int31()
 	binlog.Log(fmtString, value0)
+	var hash uint32
+	err := binary.Read(&buf, binary.LittleEndian, &hash)
+	if err != nil {
+		t.Fatalf("Failed to read back hash %v", err)
+	}
+	var index uint32
+	err = binary.Read(&buf, binary.LittleEndian, &index)
+	if err != nil {
+		t.Fatalf("Failed to read back index %v", err)
+	}
+	if index != 1 {
+		t.Fatalf("Index is %d instead of 1", index)
+	}
 	var value1 int32
-	err := binary.Read(&buf, binary.LittleEndian, &value1) // bytes.NewBuffer(bufBytes)
+	err = binary.Read(&buf, binary.LittleEndian, &value1) // bytes.NewBuffer(bufBytes)
 	if err != nil {
 		t.Fatalf("Failed to read back %v", err)
 	}
 	if value0 != value1 {
 		t.Fatalf("Wrong data %x expected %x", value1, value0)
+	}
+}
+
+func TestPrint(t *testing.T) {
+	var buf bytes.Buffer
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	binlog := Init(&buf, uint(constDataBase), uint(constDataSize))
+	rand.Seed(42)
+
+	value := rand.Uint64()
+	fmtString := "Hello %d"
+	err := binlog.Log(fmtString, value)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	out, err := binlog.Print(&buf)
+	if err != nil {
+		t.Fatalf("%v, %v", err, out.String())
+	}
+	expected := fmt.Sprintf(fmtString, value)
+	actual := out.String()
+	if expected != actual {
+		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
 	}
 }
 
@@ -104,7 +142,7 @@ func BenchmarkEmptyString(b *testing.B) {
 func BenchmarkSingleInt(b *testing.B) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
-	fmtString := "Hello %u"
+	fmtString := "Hello %d"
 	binlog := Init(&buf, constDataBase, constDataSize)
 	binlog.Log(fmtString, 10)
 	b.ResetTimer()
