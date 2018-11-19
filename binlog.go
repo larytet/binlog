@@ -179,6 +179,8 @@ func parseLogLine(gold string) ([]writer, error) {
 			writers = append(writers, &writerByteArray{count: 8})
 		case 'c':
 			writers = append(writers, &writerByteArray{count: 1})
+		case 's':
+			writers = append(writers, &writerByteArray{count: 1})
 		default:
 			return nil, fmt.Errorf("Can not handle '%c' in %s: unknown format code", r, gold)
 		}
