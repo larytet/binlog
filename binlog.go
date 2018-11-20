@@ -25,12 +25,17 @@ import (
 */
 import "C"
 
+type handlerArg struct {
+	writer  writer
+	fmtCode rune         // for example, x (from %x)
+	argType reflect.Type // type of the argument, for example int32
+}
+
 type handler struct {
-	fmtString string   // the format string itself for decoding
-	writers   []writer // list of functions to output the data correctly 1,4 or 8 bytes of integer
-	segs      []rune   // list of format codes
-	hashUint  uint32   // hash of the format string
-	indexUint uint32   // hash of the format string
+	fmtString string        // the format string itself for decoding
+	args      []*handlerArg // list of functions to output the data correctly 1,4 or 8 bytes of integer
+	hashUint  uint32        // hash of the format string
+	indexUint uint32        // hash of the format string
 
 	// I can output only byte slices, therefore I keep slices
 	index []byte // a running index of the handler
@@ -81,7 +86,7 @@ type Binlog struct {
 	// part of the executable code section
 	handlersMap map[string]*handler
 
-	// Index in this array is the hash of format string
+	// This is map[format string hash]*handler
 	// I need this map for decoding of the binary stream
 	handlersMapHash map[uint32]*handler
 }
@@ -120,11 +125,11 @@ func (b *Binlog) getStringIndex(s string) (uint, error) {
 	}
 }
 
-func (b *Binlog) createHandler(fmtStr string, args ...interface{}) (*handler, error) {
+func (b *Binlog) createHandler(fmtStr string, args []interface{}) (*handler, error) {
 	var h handler
 	h.fmtString = fmtStr
 	var err error
-	h.writers, h.segs, err = parseLogLine(fmtStr, args)
+	h.args, err = parseLogLine(fmtStr, args)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +154,7 @@ func (b *Binlog) createHandler(fmtStr string, args ...interface{}) (*handler, er
 // My hashtable is trivial: address of the string is an index in the array of handlers
 // I assume that all strings are allocated in the same text section of the executable
 // If this is not the case I try to use a map (slower)
-func (b *Binlog) getHandler(fmtStr string, args ...interface{}) (*handler, error) {
+func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*handler, error) {
 	var h *handler = &defaultHandler
 	var err error
 	var sIndex uint
@@ -163,6 +168,7 @@ func (b *Binlog) getHandler(fmtStr string, args ...interface{}) (*handler, error
 				return nil, err
 			}
 			b.handlersArray[sIndex] = h
+			b.handlersMapHash[h.hashUint] = h
 		}
 	} else {
 		var ok bool
@@ -173,10 +179,47 @@ func (b *Binlog) getHandler(fmtStr string, args ...interface{}) (*handler, error
 				return nil, err
 			}
 			b.handlersMap[fmtStr] = h
+			b.handlersMapHash[h.hashUint] = h
 		}
 	}
-	b.handlersMapHash[h.hashUint] = h
 	return h, nil
+}
+
+func (b *Binlog) writeIntegerToWriter(writer writer, arg interface{}) error {
+	// unsafe pointer to the data depends on the data type
+	var err error
+	switch arg.(type) {
+	case int8:
+		i := uint64(arg.(int8))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case int16:
+		i := uint64(arg.(int16))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case int32:
+		i := uint64(arg.(int32))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case int64:
+		i := uint64(arg.(int64))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case uint8:
+		i := uint64(arg.(uint8))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case uint16:
+		i := uint64(arg.(uint16))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case uint32:
+		i := uint64(arg.(uint32))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case uint64:
+		i := uint64(arg.(uint64))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case int:
+		i := uint64(arg.(int))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	default:
+		return fmt.Errorf("Unsupported type: %T\n", reflect.TypeOf(arg))
+	}
+	return err
 }
 
 // similar to fmt.Printf()
@@ -185,131 +228,166 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 	if err != nil {
 		return err
 	}
-	writers := h.writers
-	if len(writers) != len(args) {
-		return fmt.Errorf("Number of args %d does not match log line %d", len(args), len(writers))
+	hArgs := h.args
+	if len(hArgs) != len(args) {
+		return fmt.Errorf("Number of args %d does not match log line %d", len(args), len(hArgs))
 	}
 	b.ioWriter.Write(h.hash)
 	b.ioWriter.Write(h.index)
 	for i, arg := range args {
-		// "writer" depends on the format code
-		writer := writers[i]
-		// unsafe pointer to the data depends on the data type
-		switch t := arg.(type) {
-		case int32:
-			i := int64(arg.(int32))
-			writer.write(b.ioWriter, unsafe.Pointer(&i))
-		case int64:
-			i := arg.(int64)
-			writer.write(b.ioWriter, unsafe.Pointer(&i))
-		case uint64:
-			i := arg.(uint64)
-			writer.write(b.ioWriter, unsafe.Pointer(&i))
-		case int:
-			i := int64(arg.(int))
-			writer.write(b.ioWriter, unsafe.Pointer(&i))
-		default:
-			return fmt.Errorf("Unsupported type: %T\n", t)
+		hArg := h.args[i]
+		writer := hArg.writer
+		if err := b.writeIntegerToWriter(writer, arg); err != nil {
+			return fmt.Errorf("Failed to write value %v", err)
 		}
+
 	}
 	return nil
+}
+
+func isIntegral(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return true
+	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return true
+	case reflect.Int, reflect.Uint:
+		return true
+	default:
+		return false
+	}
+}
+
+func isUnsigned(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Uint, reflect.Uint32, reflect.Uint64, reflect.Uint8, reflect.Uint16:
+		return true
+	default:
+		return false
+	}
+}
+
+func readIntegerFromReader(reader io.Reader, count int) (uint64, error) {
+	slice := make([]byte, count)
+	n, err := reader.Read(slice)
+	if (n > 0) && (n != count) {
+		return 0, fmt.Errorf("%v", err)
+	} else if n == 0 {
+		return 0, fmt.Errorf("EOF")
+	}
+	switch count {
+	case 1:
+		var value uint8
+		binary.Read(bytes.NewBuffer(slice[:]), binary.LittleEndian, &value)
+		return uint64(value), nil
+	case 2:
+		var value uint16
+		binary.Read(bytes.NewBuffer(slice[:]), binary.LittleEndian, &value)
+		return uint64(value), nil
+	case 4:
+		var value uint32
+		binary.Read(bytes.NewBuffer(slice[:]), binary.LittleEndian, &value)
+		return uint64(value), nil
+	default:
+		var value uint64
+		binary.Read(bytes.NewBuffer(slice[:]), binary.LittleEndian, &value)
+		return uint64(value), nil
+	}
+}
+
+func appendArg(args []interface{}, value uint64, argType reflect.Type) ([]interface{}, error) {
+	switch argType.Kind() {
+	case reflect.Int:
+		return append(args, int(value)), nil
+	case reflect.Uint:
+		return append(args, uint(value)), nil
+	case reflect.Int8:
+		return append(args, int8(value)), nil
+	case reflect.Int16:
+		return append(args, int16(value)), nil
+	case reflect.Int32:
+		return append(args, int32(value)), nil
+	case reflect.Int64:
+		return append(args, int64(value)), nil
+	case reflect.Uint8:
+		return append(args, uint8(value)), nil
+	case reflect.Uint16:
+		return append(args, uint16(value)), nil
+	case reflect.Uint32:
+		return append(args, uint32(value)), nil
+	case reflect.Uint64:
+		return append(args, uint64(value)), nil
+	default:
+		return nil, fmt.Errorf("Can not handle type %v", argType.Kind())
+	}
 }
 
 // Recover the human readable log from the binary stream
 func (b *Binlog) Print(reader io.Reader) (bytes.Buffer, error) {
 	var out bytes.Buffer
 	for {
-		hash := make([]byte, 4)
 		// Read format string hash
-		n, err := reader.Read(hash)
-		if n < 4 {
-			if n == 0 {
-				return out, nil
-			} else {
-				return out, fmt.Errorf("Failed to read format string hash n=%d err=%v", n, err)
-			}
-		}
-		var hashUint uint32
-		binary.Read(bytes.NewBuffer(hash[:]), binary.LittleEndian, &hashUint)
 		var h *handler
-		var ok bool
-		if h, ok = b.handlersMapHash[hashUint]; !ok {
-			return out, fmt.Errorf("Failed to find format string hash %x", hashUint)
+		if hashUint, err := readIntegerFromReader(reader, 4); err == nil {
+			var ok bool
+			if h, ok = b.handlersMapHash[uint32(hashUint)]; !ok {
+				return out, fmt.Errorf("Failed to find format string hash %x", hashUint)
+			}
+		} else if err.Error() == "EOF" {
+			return out, nil
+		} else {
+			return out, fmt.Errorf("Failed to read format string hash err=%v", err)
 		}
 
 		// Read format string index
-		n, err = reader.Read(hash)
-		if n < 4 {
-			return out, fmt.Errorf("Failed to read format string index %v", err)
-		}
-		var index uint32
-		binary.Read(bytes.NewBuffer(hash[:]), binary.LittleEndian, &index)
-		if index != h.indexUint {
-			return out, fmt.Errorf("Mismatch of the format index %d instead of %d", index, h.index)
-		}
-
-		args := make([]interface{}, 0)
-		for i, w := range h.writers {
-			count := w.getSize()
-			seg := h.segs[i]
-
-			switch count {
-			case 1:
-				buf := make([]byte, 1)
-				n, _ := reader.Read(buf)
-				if n < 1 {
-					return out, fmt.Errorf("Failed to read 1 byte integer, got %d", n)
-				}
-				if seg == 'x' {
-					var arg uint8
-					binary.Read(bytes.NewBuffer(buf), binary.LittleEndian, &arg)
-					args = append(args, arg)
-				} else {
-					var arg uint8
-					binary.Read(bytes.NewBuffer(buf), binary.LittleEndian, &arg)
-					args = append(args, arg)
-				}
-			case 8:
-				buf := make([]byte, 8)
-				n, _ := reader.Read(buf)
-				if n < 8 {
-					return out, fmt.Errorf("Failed to read 8 bytes integer, got %d", n)
-				}
-				if seg == 'x' {
-					var arg uint64
-					binary.Read(bytes.NewBuffer(buf), binary.LittleEndian, &arg)
-					args = append(args, arg)
-				} else {
-					var arg uint64
-					binary.Read(bytes.NewBuffer(buf), binary.LittleEndian, &arg)
-					args = append(args, arg)
-				}
-			default:
-				return out, fmt.Errorf("Can not handle arguments with size %d", count)
+		if index, err := readIntegerFromReader(reader, 4); err == nil {
+			if uint32(index) != h.indexUint {
+				return out, fmt.Errorf("Mismatch of the format string index: %d instead of %d", index, h.index)
 			}
-
+		} else {
+			return out, fmt.Errorf("Failed to read format string index err=%v", err)
 		}
-		fmtString := h.fmtString
-		out.WriteString(fmt.Sprintf(fmtString, args...))
+
+		hFmtString := h.fmtString
+		args := make([]interface{}, 0)
+		// Read arguments from the binary stream
+		for _, hArg := range h.args {
+			argType := hArg.argType
+			if isIntegral(argType) { // integer is always 64 bits
+				if value, err := readIntegerFromReader(reader, 8); err == nil {
+					args, err = appendArg(args, value, argType)
+					if err != nil {
+						return out, fmt.Errorf("Failed to read 64 bits err=%v", err)
+					}
+				} else {
+					return out, fmt.Errorf("Failed to read 64 bits err=%v", err)
+				}
+			} else {
+				return out, fmt.Errorf("Can not handle type %v", argType)
+			}
+		}
+		// format and push the log to the user output buffer
+		s := fmt.Sprintf(hFmtString, args...)
+		out.WriteString(s)
 	}
 	return out, nil
 }
 
-func parseLogLine(gold string, args ...interface{}) ([]writer, []rune, error) {
+func parseLogLine(gold string, args []interface{}) ([]*handlerArg, error) {
 	tmp := gold
 	f := &tmp
-	writers := make([]writer, 0)
-	segs := make([]rune, 0)
+	hArgs := make([]*handlerArg, 0)
 	var r rune
 	var n int
 
+	argIndex := 0
 	for len(*f) > 0 {
 		r, n = next(f)
 		if r == utf8.RuneError && n == 0 {
 			break
 		}
 		if r == utf8.RuneError {
-			return nil, nil, fmt.Errorf("Can not handle '%c' in %s: rune error", r, gold)
+			return nil, fmt.Errorf("Can not handle '%c' in %s: rune error", r, gold)
 		}
 		if r != '%' {
 			continue
@@ -319,23 +397,20 @@ func parseLogLine(gold string, args ...interface{}) ([]writer, []rune, error) {
 			continue
 		}
 		r, _ = next(f)
-
+		arg := args[argIndex]
+		argType := reflect.TypeOf(arg)
 		switch r {
-		case 'x':
-			writers = append(writers, &writerByteArray{count: 8})
-		case 'd':
-			writers = append(writers, &writerByteArray{count: 8})
-		case 'i':
-			writers = append(writers, &writerByteArray{count: 8})
-		case 'c':
-			writers = append(writers, &writerByteArray{count: 1})
+		case 'x', 'd', 'i', 'c':
+			writer := &writerByteArray{count: int(argType.Size())}
+			hArg := &handlerArg{writer: writer, argType: argType, fmtCode: r}
+			hArgs = append(hArgs, hArg)
 		default:
-			return nil, nil, fmt.Errorf("Can not handle '%c' in %s: unknown format code", r, gold)
+			return nil, fmt.Errorf("Can not handle '%c' in %s: unknown format code", r, gold)
 		}
-		segs = append(segs, r)
+		argIndex++
 	}
 
-	return writers, segs, nil
+	return hArgs, nil
 }
 
 func peek(s *string) rune {

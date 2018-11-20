@@ -111,6 +111,7 @@ func TestPrint(t *testing.T) {
 	value := rand.Uint64()
 	fmtString := "Hello %d"
 	err := binlog.Log(fmtString, value)
+	expected := fmt.Sprintf(fmtString, value)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -119,7 +120,6 @@ func TestPrint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v, %v", err, out.String())
 	}
-	expected := fmt.Sprintf(fmtString, value)
 	actual := out.String()
 	if expected != actual {
 		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
