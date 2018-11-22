@@ -2,7 +2,7 @@
 
 
 [[projects]]
-  branch = "maps"
+  branch = "master"
   digest = "1:c5173cd1e5e94a4a81fc0fbf687cb2123ab46756f28e1777607e8b72640fcf6f"
   name = "github.com/jandre/procfs"
   packages = [
@@ -15,16 +15,8 @@
     "util",
   ]
   pruneopts = "UT"
-  revision = "684e3215861cee0a44b297a0f8354d75a5b754a8"
-  source = "github.com/larytet/procfs"
-
-[[projects]]
-  branch = "master"
-  digest = "1:781d208516598969927df965e674282b85c0e4410df7d3dc71b5f73daa528c61"
-  name = "github.com/larytet/sprintf"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "c9a4d9310a7641bcd9ce53a84cd266d35d24c147"
+  revision = "73c449cf06350e4ac0ae5d87054697091ae65557"
+  source = "github.com/larytet-go/procfs"
 
 [solve-meta]
   analyzer-name = "dep"
@@ -32,7 +24,6 @@
   input-imports = [
     "github.com/jandre/procfs",
     "github.com/jandre/procfs/maps",
-    "github.com/larytet/sprintf",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
