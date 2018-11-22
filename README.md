@@ -6,8 +6,8 @@ This is likely the fastest possible implementation of a log in Golang or close t
 	goos: linux
 	goarch: amd64
 	pkg: binlog
-	BenchmarkEmptyString-4   	100000000	        10.7 ns/op
-	BenchmarkSingleInt-4     	30000000	        43.5 ns/op
+	BenchmarkEmptyString-4   	100000000	        23.8 ns/op
+	BenchmarkSingleInt-4     	30000000	        55.0 ns/op
 	PASS
 	coverage: 75.7% of statements
 	ok  	binlog	2.655s

@@ -17,18 +17,11 @@ import (
 	"unsafe"
 )
 
-/*
-#cgo CFLAGS: -std=c99
-
-#include <stdlib.h>
-#include <stdint.h>
-*/
-import "C"
-
 type handlerArg struct {
 	writer  writer
 	fmtCode rune         // for example, x (from %x)
 	argType reflect.Type // type of the argument, for example int32
+	argKind reflect.Kind // type of the argument, for example int32
 }
 
 type handler struct {
@@ -41,6 +34,19 @@ type handler struct {
 	index []byte // a running index of the handler
 	hash  []byte // hash of the format string
 }
+
+type Statistics struct {
+	CacheL1Miss uint64
+	CacheL2Miss uint64
+	CacheL1Hit  uint64
+	CacheL2Hit  uint64
+	CacheL2Used uint64
+}
+
+// I keep both hash of the format string and index of the string in the
+// cache. When I decode the binary stream I can ensure that both 32 bits hash
+// and index match
+const SEND_STRING_INDEX bool = false
 
 var defaultHandler handler
 
@@ -70,6 +76,8 @@ func (w *writerByteArray) write(ioWriter io.Writer, data unsafe.Pointer) error {
 	return err
 }
 
+var logIndex uint64 = 0
+
 type Binlog struct {
 	constDataBase uint
 	constDataSize uint
@@ -79,16 +87,18 @@ type Binlog struct {
 	// Index in this array is a virtual address of the format string
 	// This is for fast lookup of constant strings from the executable
 	// code section
-	handlersArray []*handler
+	cacheL1 []*handler
 
 	// Index in this array is the string itself
-	// I need this map for lookup of string which address is not
+	// I need this map for lookup of strings which address is not
 	// part of the executable code section
-	handlersMap map[string]*handler
+	// cacheL2 is 8x slower than cacheL1 in the benchmark
+	cacheL2 map[string]*handler
 
 	// This is map[format string hash]*handler
 	// I need this map for decoding of the binary stream
-	handlersMapHash map[uint32]*handler
+	handlersLookupByHash map[uint32]*handler
+	statistics           Statistics
 }
 
 const ALIGNMENT uint = 8
@@ -97,31 +107,35 @@ const ALIGNMENT uint = 8
 func Init(ioWriter io.Writer, constDataBase uint, constDataSize uint) *Binlog {
 	// allocate one handler more for handling default cases
 	constDataSize = constDataSize / ALIGNMENT
-	handlersArray := make([]*handler, constDataSize+1)
-	handlersMap := make(map[string]*handler)
-	handlersMapHash := make(map[uint32]*handler)
+	cacheL1 := make([]*handler, constDataSize+1)
+	cacheL2 := make(map[string]*handler)
+	handlersLookupByHash := make(map[uint32]*handler)
 	binlog := &Binlog{
-		constDataBase:   constDataBase,
-		constDataSize:   constDataSize,
-		handlersArray:   handlersArray,
-		handlersMap:     handlersMap,
-		handlersMapHash: handlersMapHash,
-		ioWriter:        ioWriter}
+		constDataBase:        constDataBase,
+		constDataSize:        constDataSize,
+		cacheL1:              cacheL1,
+		cacheL2:              cacheL2,
+		handlersLookupByHash: handlersLookupByHash,
+		ioWriter:             ioWriter}
 	return binlog
 }
 
-func getStringAdress(s string) uintptr {
+func getStringAddress(s string) uint {
 	sHeader := (*reflect.StringHeader)(unsafe.Pointer(&s))
-	return sHeader.Data
+	return uint(sHeader.Data)
 }
 
+func (b *Binlog) GetStatistics() Statistics {
+	return b.statistics
+}
+
+// Return index of the string given the string address
 func (b *Binlog) getStringIndex(s string) (uint, error) {
-	sData := getStringAdress(s)
-	sDataOffset := (uint(sData) - b.constDataBase) / ALIGNMENT
+	sDataOffset := (getStringAddress(s) - b.constDataBase) / ALIGNMENT
 	if sDataOffset < b.constDataSize {
 		return sDataOffset, nil
 	} else {
-		return b.constDataSize, fmt.Errorf("String %x is out of address range %x-%x", sData, b.constDataBase, b.constDataBase+b.constDataSize*ALIGNMENT)
+		return b.constDataSize, fmt.Errorf("String %x is out of address range %x-%x", getStringAddress(s), b.constDataBase, b.constDataBase+b.constDataSize*ALIGNMENT)
 	}
 }
 
@@ -154,67 +168,79 @@ func (b *Binlog) createHandler(fmtStr string, args []interface{}) (*handler, err
 // My hashtable is trivial: address of the string is an index in the array of handlers
 // I assume that all strings are allocated in the same text section of the executable
 // If this is not the case I try to use a map (slower)
+// The end result of this function is a new handler for the fmtStr in L1 or L2 cache
 func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*handler, error) {
 	var h *handler = &defaultHandler
 	var err error
 	var sIndex uint
 	sIndex, _ = b.getStringIndex(fmtStr)
 	if sIndex != b.constDataSize {
-		h = b.handlersArray[sIndex]
-		if h == nil { // hashtable miss?
+		h = b.cacheL1[sIndex]
+		if h != nil { // fast cache hit? (20% of the whole function is here. Blame CPU data cache?)
+			b.statistics.CacheL1Hit++
+		} else {
+			b.statistics.CacheL1Miss++
 			h, err = b.createHandler(fmtStr, args)
 			if err != nil {
 				log.Printf("%v", err)
 				return nil, err
 			}
-			b.handlersArray[sIndex] = h
-			b.handlersMapHash[h.hashUint] = h
+			b.cacheL1[sIndex] = h
+			b.handlersLookupByHash[h.hashUint] = h
 		}
 	} else {
+		b.statistics.CacheL2Used++
+		// log.Printf("%v, use cacheL2 instead", err)
 		var ok bool
-		if h, ok = b.handlersMap[fmtStr]; !ok {
+		if h, ok = b.cacheL2[fmtStr]; ok {
+			b.statistics.CacheL2Hit++
+		} else {
+			b.statistics.CacheL2Miss++
 			h, err = b.createHandler(fmtStr, args)
 			if err != nil {
 				log.Printf("%v", err)
 				return nil, err
 			}
-			b.handlersMap[fmtStr] = h
-			b.handlersMapHash[h.hashUint] = h
+			b.cacheL2[fmtStr] = h
+			b.handlersLookupByHash[h.hashUint] = h
 		}
 	}
 	return h, nil
 }
 
-func (b *Binlog) writeIntegerToWriter(writer writer, arg interface{}) error {
+func (b *Binlog) writeArgumentToOutput(writer writer, arg interface{}, argKind reflect.Kind) error {
 	// unsafe pointer to the data depends on the data type
 	var err error
-	switch arg.(type) {
-	case int8:
+	switch argKind {
+	case reflect.Int8:
 		i := uint64(arg.(int8))
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case int16:
+	case reflect.Int16:
 		i := uint64(arg.(int16))
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case int32:
+	case reflect.Int32:
 		i := uint64(arg.(int32))
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case int64:
+	case reflect.Int64:
 		i := uint64(arg.(int64))
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case uint8:
+	case reflect.Uint8:
 		i := uint64(arg.(uint8))
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case uint16:
+	case reflect.Uint16:
 		i := uint64(arg.(uint16))
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case uint32:
+	case reflect.Uint32:
 		i := uint64(arg.(uint32))
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case uint64:
+	case reflect.Uint64:
 		i := uint64(arg.(uint64))
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case int:
+	case reflect.Int:
 		i := uint64(arg.(int))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case reflect.Uint:
+		i := uint64(arg.(uint))
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
 	default:
 		return fmt.Errorf("Unsupported type: %T\n", reflect.TypeOf(arg))
@@ -222,25 +248,28 @@ func (b *Binlog) writeIntegerToWriter(writer writer, arg interface{}) error {
 	return err
 }
 
-// similar to fmt.Printf()
+// similar to b.ioWriter.Write([]byte(fmt.Printf(fmtStr, args)))
 func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 	h, err := b.getHandler(fmtStr, args)
 	if err != nil {
 		return err
 	}
+
 	hArgs := h.args
 	if len(hArgs) != len(args) {
 		return fmt.Errorf("Number of args %d does not match log line %d", len(args), len(hArgs))
 	}
 	b.ioWriter.Write(h.hash)
-	b.ioWriter.Write(h.index)
+	if SEND_STRING_INDEX {
+		b.ioWriter.Write(h.index)
+	}
 	for i, arg := range args {
 		hArg := h.args[i]
 		writer := hArg.writer
-		if err := b.writeIntegerToWriter(writer, arg); err != nil {
+		argKind := hArg.argKind
+		if err := b.writeArgumentToOutput(writer, arg, argKind); err != nil {
 			return fmt.Errorf("Failed to write value %v", err)
 		}
-
 	}
 	return nil
 }
@@ -330,7 +359,7 @@ func (b *Binlog) Print(reader io.Reader) (bytes.Buffer, error) {
 		var h *handler
 		if hashUint, err := readIntegerFromReader(reader, 4); err == nil {
 			var ok bool
-			if h, ok = b.handlersMapHash[uint32(hashUint)]; !ok {
+			if h, ok = b.handlersLookupByHash[uint32(hashUint)]; !ok {
 				return out, fmt.Errorf("Failed to find format string hash %x", hashUint)
 			}
 		} else if err.Error() == "EOF" {
@@ -340,12 +369,15 @@ func (b *Binlog) Print(reader io.Reader) (bytes.Buffer, error) {
 		}
 
 		// Read format string index
-		if index, err := readIntegerFromReader(reader, 4); err == nil {
-			if uint32(index) != h.indexUint {
-				return out, fmt.Errorf("Mismatch of the format string index: %d instead of %d", index, h.index)
+		if SEND_STRING_INDEX {
+			if index, err := readIntegerFromReader(reader, 4); err == nil {
+				if uint32(index) != h.indexUint {
+					return out, fmt.Errorf("Mismatch of the format string index: %d instead of %d", index, h.index)
+				}
+			} else {
+				return out, fmt.Errorf("Failed to read format string index err=%v", err)
 			}
-		} else {
-			return out, fmt.Errorf("Failed to read format string index err=%v", err)
+
 		}
 
 		hFmtString := h.fmtString
@@ -399,10 +431,12 @@ func parseLogLine(gold string, args []interface{}) ([]*handlerArg, error) {
 		r, _ = next(f)
 		arg := args[argIndex]
 		argType := reflect.TypeOf(arg)
+		argKind := argType.Kind()
+		count := int(argType.Size()) // number of bytes in the argument
 		switch r {
 		case 'x', 'd', 'i', 'c':
-			writer := &writerByteArray{count: int(argType.Size())}
-			hArg := &handlerArg{writer: writer, argType: argType, fmtCode: r}
+			writer := &writerByteArray{count: count}
+			hArg := &handlerArg{writer: writer, argType: argType, fmtCode: r, argKind: argKind}
 			hArgs = append(hArgs, hArg)
 		default:
 			return nil, fmt.Errorf("Can not handle '%c' in %s: unknown format code", r, gold)
@@ -428,7 +462,7 @@ func next(s *string) (rune, int) {
 
 func getTextAddressSize(maps []*maps.Maps) (constDataBase uint, constDataSize uint) {
 	s := "TestString"
-	sAddress := uint(getStringAdress(s))
+	sAddress := getStringAddress(s)
 	for i := 0; i < len(maps); i++ {
 		start := uint(maps[i].AddressStart)
 		end := uint(maps[i].AddressEnd)
