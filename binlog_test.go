@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/larytet/sprintf"
+	"runtime"
+	//	"github.com/larytet/sprintf"
 	"math/rand"
 	"reflect"
+	"strings"
 	"testing"
 	"unsafe"
 )
@@ -18,6 +20,18 @@ func align(v uintptr) uintptr {
 
 func getStringSize(s string) uintptr {
 	return align(uintptr(len(s)))
+}
+
+func TestStringDedup(t *testing.T) {
+	if ADD_SOURCE_LINE {
+		s0 := "Hello, world"
+		s1 := "Hello, world"
+		p0 := uintptr(unsafe.Pointer(&s0))
+		p1 := uintptr(unsafe.Pointer(&s1))
+		if p1 == p0 {
+			t.Fatalf("Golinker dedups strings in this environment")
+		}
+	}
 }
 
 func TestStringLocation(t *testing.T) {
@@ -79,6 +93,8 @@ func TestInt(t *testing.T) {
 	fmtString := "Hello %d"
 	rand.Seed(42)
 	value0 := rand.Int31()
+	// This line should be placed right before call to Log()
+	_, filename, line, _ := runtime.Caller(0)
 	binlog.Log(fmtString, value0)
 	var hash uint32
 	err := binary.Read(&buf, binary.LittleEndian, &hash)
@@ -95,6 +111,25 @@ func TestInt(t *testing.T) {
 			t.Fatalf("Index is %d instead of 1", index)
 		}
 	}
+	if ADD_SOURCE_LINE {
+		var filenameHash uint16
+		var lineNumber uint16
+		err = binary.Read(&buf, binary.LittleEndian, &filenameHash)
+		if err == nil {
+			err = binary.Read(&buf, binary.LittleEndian, &lineNumber)
+		}
+		if err != nil {
+			t.Fatalf("Failed to read filename %v", err)
+		}
+		expectedFilenameHash := uint16(md5sum(filename))
+		expectedLineNumber := uint16(line + 1)
+		if filenameHash != expectedFilenameHash {
+			t.Fatalf("Filename hash is %x instead of %x for file '%s'", filenameHash, expectedFilenameHash, filename)
+		}
+		if lineNumber != expectedLineNumber {
+			t.Fatalf("Line number is %d instead of %d for file '%s'", lineNumber, expectedLineNumber, filename)
+		}
+	}
 	var value1 int32
 	err = binary.Read(&buf, binary.LittleEndian, &value1) // bytes.NewBuffer(bufBytes)
 	if err != nil {
@@ -103,9 +138,24 @@ func TestInt(t *testing.T) {
 	if value0 != value1 {
 		t.Fatalf("Wrong data %x expected %x", value1, value0)
 	}
+	indexTable, filenames := binlog.GetIndexTable()
+	if len(indexTable) != 1 {
+		t.Fatalf("Wrong size of the index table %d expected %d", len(indexTable), 1)
+	}
+	if ADD_SOURCE_LINE && len(filenames) != 1 {
+		t.Fatalf("Wrong size of the filenames %d expected %d", len(filenames), 1)
+	}
+	if !ADD_SOURCE_LINE && len(filenames) != 0 {
+		t.Fatalf("Wrong size of the filenames %d expected %d", len(filenames), 0)
+	}
+	for _, h := range indexTable {
+		if h.FmtString != fmtString {
+			t.Fatalf("Wrong format string '%s' instead of '%s' in the cache", h.FmtString, fmtString)
+		}
+	}
 }
 
-func TestPrint(t *testing.T) {
+func testPrint(t *testing.T) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	binlog := Init(&buf, uint(constDataBase), uint(constDataSize))
@@ -124,9 +174,45 @@ func TestPrint(t *testing.T) {
 		t.Fatalf("%v, %v", err, out.String())
 	}
 	actual := out.String()
-	if expected != actual {
-		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
+	if ADD_SOURCE_LINE {
+		if !strings.HasSuffix(actual, expected) {
+			t.Fatalf("Print failed '%s' does not contain '%s' ", actual, expected)
+		}
+	} else {
+		if expected != actual {
+			t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
+		}
+
 	}
+}
+
+type testParameters struct {
+	sendStringIndex bool
+	addSourceLine   bool
+}
+
+func TestPrint(t *testing.T) {
+	var tests []testParameters = []testParameters{
+		testParameters{
+			false, false,
+		},
+		testParameters{
+			false, true,
+		},
+		testParameters{
+			true, false,
+		},
+		testParameters{
+			true, true,
+		},
+	}
+	for _, p := range tests {
+		SEND_STRING_INDEX = p.sendStringIndex
+		ADD_SOURCE_LINE = p.addSourceLine
+		testPrint(t)
+	}
+	SEND_STRING_INDEX = false
+	ADD_SOURCE_LINE = false
 }
 
 func TestCacheL2(t *testing.T) {
@@ -149,8 +235,14 @@ func TestCacheL2(t *testing.T) {
 		t.Fatalf("%v, %v", err, out.String())
 	}
 	actual := out.String()
-	if expected != actual {
-		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
+	if ADD_SOURCE_LINE {
+		if !strings.HasSuffix(actual, expected) {
+			t.Fatalf("Print failed '%s' does not contain '%s' ", actual, expected)
+		}
+	} else {
+		if expected != actual {
+			t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
+		}
 	}
 	statistics := binlog.GetStatistics()
 	if statistics.CacheL2Used != 1 {
@@ -181,13 +273,16 @@ func BenchmarkEmptyString(b *testing.B) {
 	}
 	b.StopTimer()
 	statistics := binlog.GetStatistics()
-	if statistics.CacheL2Miss != 0 {
-		b.Fatalf("Cache L2 miss is %d instead of zero", statistics.CacheL2Miss)
+	if statistics.L2CacheMiss != 0 {
+		b.Fatalf(" L2Cache miss is %d instead of zero", statistics.L2CacheMiss)
 	}
-	if statistics.CacheL1Miss != 1 {
-		b.Fatalf("Cache L1 miss is %d instead of one", statistics.CacheL1Miss)
+	if statistics.L1CacheMiss != 1 {
+		b.Fatalf(" L1Cache miss is %d instead of one", statistics.L1CacheMiss)
 	}
-	b.Logf(sprintf.SprintfStructure(statistics, 4, "  %15s %9d", nil))
+	if statistics.L1CacheHit != uint64(b.N) {
+		b.Fatalf(" L1Cache hist is %d instead of %d", statistics.L1CacheHit, b.N)
+	}
+	//b.Logf(sprintf.SprintfStructure(statistics, 4, "  %15s %9d", nil))
 }
 
 func BenchmarkSingleInt(b *testing.B) {
@@ -218,10 +313,13 @@ func BenchmarkSingleIntCacheL2(b *testing.B) {
 	}
 	b.StopTimer()
 	statistics := binlog.GetStatistics()
-	if statistics.CacheL2Miss != 1 {
-		b.Fatalf("Cache L2 miss is %d instead of 1", statistics.CacheL2Miss)
+	if statistics.L2CacheMiss != 1 {
+		b.Fatalf("L2Cache miss is %d instead of 1", statistics.L2CacheMiss)
 	}
 	if (statistics.CacheL2Used - 1) != uint64(b.N) {
-		b.Fatalf("Cache L2 used %d times instead of %d time", statistics.CacheL2Used, b.N)
+		b.Fatalf(" L2Cache used %d times instead of %d time", statistics.CacheL2Used, b.N)
+	}
+	if statistics.L2CacheMiss != 1 {
+		b.Fatalf("L2Cache miss is %d instead of one", statistics.L1CacheMiss)
 	}
 }

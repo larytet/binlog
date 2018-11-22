@@ -12,71 +12,52 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"runtime"
 	"sync/atomic"
 	"unicode/utf8"
 	"unsafe"
 )
 
-type handlerArg struct {
+type HandlerArg struct {
 	writer  writer
-	fmtCode rune         // for example, x (from %x)
-	argType reflect.Type // type of the argument, for example int32
-	argKind reflect.Kind // type of the argument, for example int32
+	FmtCode rune         // for example, x (from %x)
+	ArgType reflect.Type // type of the argument, for example int32
+	ArgKind reflect.Kind // type of the argument, for example int32
 }
 
-type handler struct {
-	fmtString string        // the format string itself for decoding
-	args      []*handlerArg // list of functions to output the data correctly 1,4 or 8 bytes of integer
-	hashUint  uint32        // hash of the format string
-	indexUint uint32        // hash of the format string
+type Handler struct {
+	FmtString        string        // the format string itself for decoding
+	Address          uintptr       // address of the string
+	IsL1Cache        bool          // true if the string in the L1 cache
+	Args             []*HandlerArg // list of functions to output the data correctly 1,4 or 8 bytes of integer
+	HashUint         uint32        // hash of the format string
+	IndexUint        uint32        // hash of the format string
+	FilenameHashUint uint16        // hash of the filename
+	LineNumberUint   uint16        // source line number
 
 	// I can output only byte slices, therefore I keep slices
-	index []byte // a running index of the handler
-	hash  []byte // hash of the format string
+	index        []byte // a running index of the handler
+	hash         []byte // hash of the format string
+	filenameHash []byte
+	lineNumber   []byte
 }
 
 type Statistics struct {
-	CacheL1Miss uint64
-	CacheL2Miss uint64
-	CacheL1Hit  uint64
-	CacheL2Hit  uint64
+	L1CacheMiss uint64
+	L2CacheMiss uint64
+	L1CacheHit  uint64
+	L2CacheHit  uint64
 	CacheL2Used uint64
 }
 
 // I keep both hash of the format string and index of the string in the
 // cache. When I decode the binary stream I can ensure that both 32 bits hash
 // and index match
-const SEND_STRING_INDEX bool = false
+var SEND_STRING_INDEX bool = false
 
-var defaultHandler handler
-
-type writer interface {
-	write(io.Writer, unsafe.Pointer) error
-	getSize() int
-}
-
-type writerByteArray struct {
-	count int
-}
-
-func (w *writerByteArray) getSize() int {
-	return w.count
-}
-
-func (w *writerByteArray) write(ioWriter io.Writer, data unsafe.Pointer) error {
-	// I am doing something which https://golang.org/pkg/unsafe/ explicitly forbids
-	var hdr reflect.SliceHeader
-	hdr.Len = w.count
-	hdr.Data = uintptr(unsafe.Pointer((*byte)(data)))
-	hdr.Cap = w.count
-
-	dataToWrite := *((*[]byte)(unsafe.Pointer(&hdr)))
-	//log.Printf("Writing %v, count=%d", dataToWrite, w.count)
-	_, err := ioWriter.Write(dataToWrite)
-	return err
-}
-
-var logIndex uint64 = 0
+// Add hash of the filename (16 bits) and line in the source (16 bits)
+// I assume the the goloang does not dedups the constant strings
+var ADD_SOURCE_LINE bool = false
 
 type Binlog struct {
 	constDataBase uint
@@ -87,17 +68,21 @@ type Binlog struct {
 	// Index in this array is a virtual address of the format string
 	// This is for fast lookup of constant strings from the executable
 	// code section
-	cacheL1 []*handler
+	L1Cache []*Handler
 
 	// Index in this array is the string itself
 	// I need this map for lookup of strings which address is not
 	// part of the executable code section
-	// cacheL2 is 8x slower than cacheL1 in the benchmark
-	cacheL2 map[string]*handler
+	// L2Cache is 8x slower than L1Cache in the benchmark
+	L2Cache map[string]*Handler
 
-	// This is map[format string hash]*handler
+	// All filenames I encountered
+	// Only if ADD_SOURCE_LINE is true
+	Filenames map[uint16]string
+
+	// This is map[format string hash]*Handler
 	// I need this map for decoding of the binary stream
-	handlersLookupByHash map[uint32]*handler
+	handlersLookupByHash map[uint32]*Handler
 	statistics           Statistics
 }
 
@@ -107,145 +92,23 @@ const ALIGNMENT uint = 8
 func Init(ioWriter io.Writer, constDataBase uint, constDataSize uint) *Binlog {
 	// allocate one handler more for handling default cases
 	constDataSize = constDataSize / ALIGNMENT
-	cacheL1 := make([]*handler, constDataSize+1)
-	cacheL2 := make(map[string]*handler)
-	handlersLookupByHash := make(map[uint32]*handler)
+	L1Cache := make([]*Handler, constDataSize+1)
+	L2Cache := make(map[string]*Handler)
+	filenames := make(map[uint16]string)
+	handlersLookupByHash := make(map[uint32]*Handler)
 	binlog := &Binlog{
 		constDataBase:        constDataBase,
 		constDataSize:        constDataSize,
-		cacheL1:              cacheL1,
-		cacheL2:              cacheL2,
+		L1Cache:              L1Cache,
+		L2Cache:              L2Cache,
+		Filenames:            filenames,
 		handlersLookupByHash: handlersLookupByHash,
 		ioWriter:             ioWriter}
 	return binlog
 }
 
-func getStringAddress(s string) uint {
-	sHeader := (*reflect.StringHeader)(unsafe.Pointer(&s))
-	return uint(sHeader.Data)
-}
-
 func (b *Binlog) GetStatistics() Statistics {
 	return b.statistics
-}
-
-// Return index of the string given the string address
-func (b *Binlog) getStringIndex(s string) (uint, error) {
-	sDataOffset := (getStringAddress(s) - b.constDataBase) / ALIGNMENT
-	if sDataOffset < b.constDataSize {
-		return sDataOffset, nil
-	} else {
-		return b.constDataSize, fmt.Errorf("String %x is out of address range %x-%x", getStringAddress(s), b.constDataBase, b.constDataBase+b.constDataSize*ALIGNMENT)
-	}
-}
-
-func (b *Binlog) createHandler(fmtStr string, args []interface{}) (*handler, error) {
-	var h handler
-	h.fmtString = fmtStr
-	var err error
-	h.args, err = parseLogLine(fmtStr, args)
-	if err != nil {
-		return nil, err
-	}
-
-	index := atomic.AddUint32(&b.currentIndex, 1) // If I want the index to start from zero I can add (-1)
-	var bufIndex bytes.Buffer
-	binary.Write(&bufIndex, binary.LittleEndian, &index)
-	h.index = bufIndex.Bytes()
-
-	md5sum := md5.Sum([]byte(fmtStr))
-	var hash uint32
-	binary.Read(bytes.NewBuffer(md5sum[:]), binary.LittleEndian, &hash)
-	var bufHash bytes.Buffer
-	binary.Write(&bufHash, binary.LittleEndian, &hash)
-	h.hash = bufHash.Bytes()
-	h.hashUint = hash
-	h.indexUint = index
-
-	return &h, nil
-}
-
-// My hashtable is trivial: address of the string is an index in the array of handlers
-// I assume that all strings are allocated in the same text section of the executable
-// If this is not the case I try to use a map (slower)
-// The end result of this function is a new handler for the fmtStr in L1 or L2 cache
-func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*handler, error) {
-	var h *handler = &defaultHandler
-	var err error
-	var sIndex uint
-	sIndex, _ = b.getStringIndex(fmtStr)
-	if sIndex != b.constDataSize {
-		h = b.cacheL1[sIndex]
-		if h != nil { // fast cache hit? (20% of the whole function is here. Blame CPU data cache?)
-			b.statistics.CacheL1Hit++
-		} else {
-			b.statistics.CacheL1Miss++
-			h, err = b.createHandler(fmtStr, args)
-			if err != nil {
-				log.Printf("%v", err)
-				return nil, err
-			}
-			b.cacheL1[sIndex] = h
-			b.handlersLookupByHash[h.hashUint] = h
-		}
-	} else {
-		b.statistics.CacheL2Used++
-		// log.Printf("%v, use cacheL2 instead", err)
-		var ok bool
-		if h, ok = b.cacheL2[fmtStr]; ok {
-			b.statistics.CacheL2Hit++
-		} else {
-			b.statistics.CacheL2Miss++
-			h, err = b.createHandler(fmtStr, args)
-			if err != nil {
-				log.Printf("%v", err)
-				return nil, err
-			}
-			b.cacheL2[fmtStr] = h
-			b.handlersLookupByHash[h.hashUint] = h
-		}
-	}
-	return h, nil
-}
-
-func (b *Binlog) writeArgumentToOutput(writer writer, arg interface{}, argKind reflect.Kind) error {
-	// unsafe pointer to the data depends on the data type
-	var err error
-	switch argKind {
-	case reflect.Int8:
-		i := uint64(arg.(int8))
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Int16:
-		i := uint64(arg.(int16))
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Int32:
-		i := uint64(arg.(int32))
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Int64:
-		i := uint64(arg.(int64))
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Uint8:
-		i := uint64(arg.(uint8))
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Uint16:
-		i := uint64(arg.(uint16))
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Uint32:
-		i := uint64(arg.(uint32))
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Uint64:
-		i := uint64(arg.(uint64))
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Int:
-		i := uint64(arg.(int))
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Uint:
-		i := uint64(arg.(uint))
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	default:
-		return fmt.Errorf("Unsupported type: %T\n", reflect.TypeOf(arg))
-	}
-	return err
 }
 
 // similar to b.ioWriter.Write([]byte(fmt.Printf(fmtStr, args)))
@@ -255,23 +118,111 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 		return err
 	}
 
-	hArgs := h.args
+	hArgs := h.Args
 	if len(hArgs) != len(args) {
 		return fmt.Errorf("Number of args %d does not match log line %d", len(args), len(hArgs))
 	}
 	b.ioWriter.Write(h.hash)
+
 	if SEND_STRING_INDEX {
 		b.ioWriter.Write(h.index)
 	}
+
+	if ADD_SOURCE_LINE {
+		b.ioWriter.Write(h.filenameHash)
+		b.ioWriter.Write(h.lineNumber)
+	}
+
 	for i, arg := range args {
-		hArg := h.args[i]
+		hArg := h.Args[i]
 		writer := hArg.writer
-		argKind := hArg.argKind
+		argKind := hArg.ArgKind
 		if err := b.writeArgumentToOutput(writer, arg, argKind); err != nil {
 			return fmt.Errorf("Failed to write value %v", err)
 		}
 	}
 	return nil
+}
+
+// Recover the human readable log from the binary stream
+func (b *Binlog) Print(reader io.Reader) (bytes.Buffer, error) {
+	indexTable, filenames := b.GetIndexTable()
+	return Print(reader, indexTable, filenames)
+}
+
+func Print(reader io.Reader, indexTable map[uint32]*Handler, filenames map[uint16]string) (bytes.Buffer, error) {
+	var out bytes.Buffer
+	for {
+		// Read format string hash
+		var h *Handler
+		if hashUint, err := readIntegerFromReader(reader, 4); err == nil {
+			var ok bool
+			if h, ok = indexTable[uint32(hashUint)]; !ok {
+				return out, fmt.Errorf("Failed to find format string hash %x", hashUint)
+			}
+		} else if err.Error() == "EOF" {
+			return out, nil
+		} else {
+			return out, fmt.Errorf("Failed to read format string hash err=%v", err)
+		}
+
+		// Read format string index
+		if SEND_STRING_INDEX {
+			if index, err := readIntegerFromReader(reader, 4); err == nil {
+				if uint32(index) != h.IndexUint {
+					return out, fmt.Errorf("Mismatch of the format string index: %d instead of %d", index, h.index)
+				}
+			} else {
+				return out, fmt.Errorf("Failed to read format string index err=%v", err)
+			}
+
+		}
+		if ADD_SOURCE_LINE {
+			// Read filename hash and source line number from the binary stream
+			if filenameHash, err := readIntegerFromReader(reader, 2); err == nil {
+				filename, ok := filenames[uint16(filenameHash)]
+				if !ok {
+					return out, fmt.Errorf("Failed to find filename with hash %x", filenameHash)
+				}
+				out.WriteString(filename)
+			}
+			if lineNumber, err := readIntegerFromReader(reader, 2); err == nil {
+				out.WriteString(fmt.Sprintf(":%d ", lineNumber))
+			} else {
+				return out, fmt.Errorf("Failed to read source file linenumber err=%v", err)
+			}
+		}
+
+		hFmtString := h.FmtString
+		args := make([]interface{}, 0)
+		// Read arguments from the binary stream
+		for _, hArg := range h.Args {
+			argType := hArg.ArgType
+			if isIntegral(argType) { // integer is always 64 bits
+				if value, err := readIntegerFromReader(reader, 8); err == nil {
+					args, err = appendArg(args, value, argType)
+					if err != nil {
+						return out, fmt.Errorf("Failed to read 64 bits err=%v", err)
+					}
+				} else {
+					return out, fmt.Errorf("Failed to read 64 bits err=%v", err)
+				}
+			} else {
+				return out, fmt.Errorf("Can not handle type %v", argType)
+			}
+		}
+		// format and push the log to the user output buffer
+		s := fmt.Sprintf(hFmtString, args...)
+		out.WriteString(s)
+	}
+	return out, nil
+}
+
+// Returns a map[hash]
+// Application can use the map for decoding of the binary stread
+// Pay attention that the map is getting updated every time a new string appears
+func (b *Binlog) GetIndexTable() (map[uint32]*Handler, map[uint16]string) {
+	return b.handlersLookupByHash, b.Filenames
 }
 
 func isIntegral(t reflect.Type) bool {
@@ -351,64 +302,164 @@ func appendArg(args []interface{}, value uint64, argType reflect.Type) ([]interf
 	}
 }
 
-// Recover the human readable log from the binary stream
-func (b *Binlog) Print(reader io.Reader) (bytes.Buffer, error) {
-	var out bytes.Buffer
-	for {
-		// Read format string hash
-		var h *handler
-		if hashUint, err := readIntegerFromReader(reader, 4); err == nil {
-			var ok bool
-			if h, ok = b.handlersLookupByHash[uint32(hashUint)]; !ok {
-				return out, fmt.Errorf("Failed to find format string hash %x", hashUint)
-			}
-		} else if err.Error() == "EOF" {
-			return out, nil
-		} else {
-			return out, fmt.Errorf("Failed to read format string hash err=%v", err)
-		}
-
-		// Read format string index
-		if SEND_STRING_INDEX {
-			if index, err := readIntegerFromReader(reader, 4); err == nil {
-				if uint32(index) != h.indexUint {
-					return out, fmt.Errorf("Mismatch of the format string index: %d instead of %d", index, h.index)
-				}
-			} else {
-				return out, fmt.Errorf("Failed to read format string index err=%v", err)
-			}
-
-		}
-
-		hFmtString := h.fmtString
-		args := make([]interface{}, 0)
-		// Read arguments from the binary stream
-		for _, hArg := range h.args {
-			argType := hArg.argType
-			if isIntegral(argType) { // integer is always 64 bits
-				if value, err := readIntegerFromReader(reader, 8); err == nil {
-					args, err = appendArg(args, value, argType)
-					if err != nil {
-						return out, fmt.Errorf("Failed to read 64 bits err=%v", err)
-					}
-				} else {
-					return out, fmt.Errorf("Failed to read 64 bits err=%v", err)
-				}
-			} else {
-				return out, fmt.Errorf("Can not handle type %v", argType)
-			}
-		}
-		// format and push the log to the user output buffer
-		s := fmt.Sprintf(hFmtString, args...)
-		out.WriteString(s)
-	}
-	return out, nil
+func getStringAddress(s string) uint {
+	sHeader := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	return uint(sHeader.Data)
 }
 
-func parseLogLine(gold string, args []interface{}) ([]*handlerArg, error) {
+// Return index of the string given the string address
+func (b *Binlog) getStringIndex(s string) (uint, error) {
+	sDataOffset := (getStringAddress(s) - b.constDataBase) / ALIGNMENT
+	if sDataOffset < b.constDataSize {
+		return sDataOffset, nil
+	} else {
+		return b.constDataSize, fmt.Errorf("String %x is out of address range %x-%x", getStringAddress(s), b.constDataBase, b.constDataBase+b.constDataSize*ALIGNMENT)
+	}
+}
+
+func md5sum(s string) uint32 {
+	md5sum := md5.Sum([]byte(s))
+	var hash uint32
+	binary.Read(bytes.NewBuffer(md5sum[:]), binary.LittleEndian, &hash)
+	return hash
+}
+
+func intToSlice(v interface{}) []byte {
+	var bufHash bytes.Buffer
+	binary.Write(&bufHash, binary.LittleEndian, v)
+	return bufHash.Bytes()
+}
+
+func (b *Binlog) createHandler(fmtStr string, args []interface{}) (*Handler, error) {
+	var h Handler
+	h.FmtString = fmtStr
+	var err error
+	h.Args, err = parseLogLine(fmtStr, args)
+	if err != nil {
+		return nil, err
+	}
+
+	if SEND_STRING_INDEX {
+		index := atomic.AddUint32(&b.currentIndex, 1) // If I want the index to start from zero I can add (-1)
+		var bufIndex bytes.Buffer
+		binary.Write(&bufIndex, binary.LittleEndian, &index)
+		h.index = bufIndex.Bytes()
+		h.IndexUint = index
+	}
+
+	hash := md5sum(fmtStr)
+	h.hash = intToSlice(&hash)
+	h.HashUint = hash
+
+	return &h, nil
+}
+
+// My hashtable is trivial: address of the string is an index in the array of handlers
+// I assume that all strings are allocated in the same text section of the executable
+// If this is not the case I try to use a map (slower)
+// The end result of this function is a new handler for the fmtStr in L1 or L2 cache
+func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*Handler, error) {
+	var h *Handler = &defaultHandler
+	var err error
+	var sIndex uint
+	var isMiss bool = false
+	sIndex, _ = b.getStringIndex(fmtStr)
+	if sIndex != b.constDataSize {
+		h = b.L1Cache[sIndex]
+		if h != nil { // fast cache hit? (20% of the whole function is here. Blame CPU data cache?)
+			b.statistics.L1CacheHit++
+		} else {
+			isMiss = true
+			b.statistics.L1CacheMiss++
+			h, err = b.createHandler(fmtStr, args)
+			if err != nil {
+				log.Printf("%v", err)
+				return nil, err
+			}
+			b.L1Cache[sIndex] = h
+			b.handlersLookupByHash[h.HashUint] = h
+		}
+	} else {
+		b.statistics.CacheL2Used++
+		// log.Printf("%v, use L2Cache instead", err)
+		var ok bool
+		if h, ok = b.L2Cache[fmtStr]; ok {
+			b.statistics.L2CacheHit++
+		} else {
+			isMiss = true
+			b.statistics.L2CacheMiss++
+			h, err = b.createHandler(fmtStr, args)
+			if err != nil {
+				log.Printf("%v", err)
+				return nil, err
+			}
+			b.L2Cache[fmtStr] = h
+			b.handlersLookupByHash[h.HashUint] = h
+		}
+	}
+	// Set filename and source line number
+	if ADD_SOURCE_LINE && isMiss {
+		var filenameHash uint16 = 0xBADB
+		var fileLine uint16 = 0xADBA
+		// Caller(0) is this function, Caller(1) is Log()
+		_, filename, line, ok := runtime.Caller(2)
+		if ok {
+			filenameHash = uint16(md5sum(filename))
+			fileLine = uint16(line)
+		}
+		h.FilenameHashUint = filenameHash
+		h.LineNumberUint = fileLine
+		h.filenameHash = intToSlice(&filenameHash)
+		h.lineNumber = intToSlice(&fileLine)
+		b.Filenames[h.FilenameHashUint] = filename
+	}
+	return h, nil
+}
+
+func (b *Binlog) writeArgumentToOutput(writer writer, arg interface{}, argKind reflect.Kind) error {
+	// unsafe pointer to the data depends on the data type
+	var err error
+	switch argKind {
+	case reflect.Int8:
+		i := uint64(arg.(int8))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case reflect.Int16:
+		i := uint64(arg.(int16))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case reflect.Int32:
+		i := uint64(arg.(int32))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case reflect.Int64:
+		i := uint64(arg.(int64))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case reflect.Uint8:
+		i := uint64(arg.(uint8))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case reflect.Uint16:
+		i := uint64(arg.(uint16))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case reflect.Uint32:
+		i := uint64(arg.(uint32))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case reflect.Uint64:
+		i := uint64(arg.(uint64))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case reflect.Int:
+		i := uint64(arg.(int))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case reflect.Uint:
+		i := uint64(arg.(uint))
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	default:
+		return fmt.Errorf("Unsupported type: %T\n", reflect.TypeOf(arg))
+	}
+	return err
+}
+
+func parseLogLine(gold string, args []interface{}) ([]*HandlerArg, error) {
 	tmp := gold
 	f := &tmp
-	hArgs := make([]*handlerArg, 0)
+	hArgs := make([]*HandlerArg, 0)
 	var r rune
 	var n int
 
@@ -436,7 +487,7 @@ func parseLogLine(gold string, args []interface{}) ([]*handlerArg, error) {
 		switch r {
 		case 'x', 'd', 'i', 'c':
 			writer := &writerByteArray{count: count}
-			hArg := &handlerArg{writer: writer, argType: argType, fmtCode: r, argKind: argKind}
+			hArg := &HandlerArg{writer: writer, ArgType: argType, FmtCode: r, ArgKind: argKind}
 			hArgs = append(hArgs, hArg)
 		default:
 			return nil, fmt.Errorf("Can not handle '%c' in %s: unknown format code", r, gold)
@@ -494,4 +545,32 @@ func SprintfMaps(maps []*maps.Maps) string {
 		s = s + fmt.Sprintf("\n%v", (*m))
 	}
 	return s
+}
+
+var defaultHandler Handler
+
+type writer interface {
+	write(io.Writer, unsafe.Pointer) error
+	getSize() int
+}
+
+type writerByteArray struct {
+	count int
+}
+
+func (w *writerByteArray) getSize() int {
+	return w.count
+}
+
+func (w *writerByteArray) write(ioWriter io.Writer, data unsafe.Pointer) error {
+	// I am doing something which https://golang.org/pkg/unsafe/ explicitly forbids
+	var hdr reflect.SliceHeader
+	hdr.Len = w.count
+	hdr.Data = uintptr(unsafe.Pointer((*byte)(data)))
+	hdr.Cap = w.count
+
+	dataToWrite := *((*[]byte)(unsafe.Pointer(&hdr)))
+	//log.Printf("Writing %v, count=%d", dataToWrite, w.count)
+	_, err := ioWriter.Write(dataToWrite)
+	return err
 }

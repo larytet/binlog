@@ -29,6 +29,18 @@ Example:
 }
 ```
 
+The API is not thread safe. One prossible workaround is to have an instance of the binlog in every thread, and flush the output to a file/stdout from time to time.
+Add index and/or a timestamp all log entries and order the log entries when printing for human consumption
+
+This logger will not work well for application which allocate format strings dynamically, like in the code below 
+
+```Go
+{
+	fmtString := fmt.Sprintf("%s %%d", "Hello")
+	err := binlog.Log(fmtString, value)
+}
+```
+
 # Links
 
 More benchmark for different logging frameworks (tip: NOP loggers which do nothing require 100ns/op)
@@ -39,4 +51,16 @@ More benchmark for different logging frameworks (tip: NOP loggers which do nothi
 Golang related stuff 
 
 * https://github.com/golang/go/issues/28864
+* https://medium.com/justforfunc/understanding-go-programs-with-go-parser-c4e88a6edb87
+* https://stackoverflow.com/questions/50524607/go-lang-func-parameter-type
+* https://stackoverflow.com/questions/46115312/use-ast-to-get-all-function-calls-in-a-function
+* 
 
+
+# Todo
+
+Add hash of the strings to the binary stream. Parse the Go sources, collect and hash all strings in calls to the binlog. Decode binary streams
+using only the source files. Should I assume that calls to the log look like xx.Log("...", arg1, ...)?
+
+Allow the application to add unique identifier to the log - a tuple [hash of the sourceFileName, line number]. Can I cache the filename/lineNumber? What if Go 
+linker dedups the strings in the executable and keeps only one copy of a string?
