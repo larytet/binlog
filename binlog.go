@@ -18,6 +18,18 @@ import (
 	"unsafe"
 )
 
+// I keep hash of the format string and index of the string in the
+// cache. When I decode the binary stream I can ensure that both 32 bits hash
+// and index of the string match. This flag is useful for debug or fast lookup
+// when decoding binary streams
+var SEND_STRING_INDEX bool = false
+
+// Add hash of the filename (16 bits) and line in the source (16 bits)
+// to the binary stream
+// I assume the the goloang does not dedups the constant strings and all
+// calls to the Log() use unique string. There is a test which ensures this
+var ADD_SOURCE_LINE bool = false
+
 type HandlerArg struct {
 	writer  writer
 	FmtCode rune         // for example, x (from %x)
@@ -49,15 +61,6 @@ type Statistics struct {
 	L2CacheHit  uint64
 	CacheL2Used uint64
 }
-
-// I keep both hash of the format string and index of the string in the
-// cache. When I decode the binary stream I can ensure that both 32 bits hash
-// and index match
-var SEND_STRING_INDEX bool = false
-
-// Add hash of the filename (16 bits) and line in the source (16 bits)
-// I assume the the goloang does not dedups the constant strings
-var ADD_SOURCE_LINE bool = false
 
 type Binlog struct {
 	constDataBase uint
