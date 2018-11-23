@@ -38,7 +38,7 @@ Example:
 The API is not thread safe. One prossible workaround is to have an instance of the binlog in every thread, and flush the output to a file/stdout from time to time.
 Add index and/or a timestamp all log entries and order the log entries when printing for human consumption
 
-This logger will not work well for application which allocate format strings dynamically, like in the code below 
+This logger will not work well for applications which allocate format strings dynamically, like in the code below 
 
 ```Go
 {
@@ -49,7 +49,7 @@ This logger will not work well for application which allocate format strings dyn
 
 # Links
 
-More benchmark for different logging frameworks (tip: NOP loggers which do nothing require 100ns/op)
+More benchmark for different logging frameworks (Spoiler: NOP loggers which do nothing require 100ns/op)
 
 * https://gist.github.com/Avinash-Bhat/48c4f06b0cc840d9fd6c
 * https://stackoverflow.com/questions/10571182/go-disable-a-log-logger
