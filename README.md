@@ -17,9 +17,8 @@ Output of an empty string (logger adds hash of the string to the binary stream) 
 	ok  	binlog	5.324s
 	
 	
-The performance of the API is on par ("just" 3-4x slower) with C++ binary logs like https://github.com/PlatformLab/NanoLog
-For example, a call to a method returning two values costs ~2ns in Golang. Golang does not inline functions often. 
-The original idea is https://github.com/ScottMansfield/nanolog/issues/4
+The performance of the API is on par ("just" 2-3x slower) with C++ binary logs like https://github.com/PlatformLab/NanoLog
+Golang does not inline functions often. The original idea is https://github.com/ScottMansfield/nanolog/issues/4
 
 Warning! This code pushes Go quite to it's limit. There are unsafe pointers, ATS walk, StringHeader and
 other forbidden things galore for any taste.
