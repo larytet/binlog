@@ -14,7 +14,7 @@ Output of an empty string (logger adds hash of the string to the binary stream) 
 	BenchmarkSingleInt-4     	30000000	        40.6 ns/op
 	PASS
 	coverage: 86.2%  of statements
-	ok  	binlog	2.655s
+	ok  	binlog	5.324s
 	
 	
 Linux only. Relies on the fact the strings in Go are located in the same ELF file segment. 
