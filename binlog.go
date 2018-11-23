@@ -277,7 +277,7 @@ func (v astVisitor) Visit(n ast.Node) ast.Visitor {
 	case *ast.BasicLit:
 		fmtString = arg0.Value
 		v.fmtStrings = append(v.fmtStrings, fmtString)
-		log.Printf("%v", v.fmtStrings)
+		//log.Printf("%v", v.fmtStrings)
 	}
 	return v
 }
@@ -312,7 +312,7 @@ func GetIndexTable(filename string) (map[uint32]*Handler, map[uint16]string, err
 		}
 	}
 	skipped := 0
-	log.Printf("Going to process %d Go modules", len(goModules))
+	log.Printf("Going to process %d Go modules in the %s", len(goModules), filename)
 	for _, module := range goModules {
 		fset := token.NewFileSet()
 		astFile, err := parser.ParseFile(fset, module, nil, 0)
