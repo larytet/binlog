@@ -10,8 +10,8 @@ Output of an empty string (logger adds hash of the string to the binary stream) 
 	goos: linux
 	goarch: amd64
 	pkg: binlog
-	BenchmarkEmptyString-4   	100000000	        23.8 ns/op
-	BenchmarkSingleInt-4     	30000000	        55.0 ns/op
+	BenchmarkEmptyString-4   	100000000	        15.3 ns/op
+	BenchmarkSingleInt-4     	30000000	        40.6 ns/op
 	PASS
 	coverage: 75.7% of statements
 	ok  	binlog	2.655s
