@@ -46,7 +46,7 @@ This logger will not work well for applications which allocate format strings dy
 ```Go
 {
 	fmtString := fmt.Sprintf("%s %%d", "Hello")
-	err := binlog.Log(fmtString, value)
+	err := binlog.Log(fmtString, value) // relatively slow "L2 cache" is used here
 }
 ```
 
