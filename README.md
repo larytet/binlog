@@ -17,7 +17,6 @@ Output of an empty string (logger adds hash of the string to the binary stream) 
 	ok  	binlog	5.324s
 	
 	
-Linux only. Relies on the fact the strings in Go are located in the same ELF file segment. 
 The performance of the API is on par ("just" 3-4x slower) with C++ binary logs like https://github.com/PlatformLab/NanoLog
 For example, a call to a method returning two values costs ~2ns in Golang. Golang does not inline functions often. 
 The original idea is https://github.com/ScottMansfield/nanolog/issues/4
@@ -37,6 +36,8 @@ Example:
 ```
 
 # Limitations
+
+I did not test for Windows - Linux only? Relies on the fact the strings in Go are located in the same ELF file segment. 
 
 The API is not thread safe. One prossible workaround is to have an instance of the binlog in every thread, and flush the output to a file/stdout from time to time.
 Add index and/or a timestamp all log entries and order the log entries when printing for human consumption
