@@ -159,13 +159,14 @@ type LogEntry struct {
 	args       []interface{}
 }
 
-// Recover the human readable log from the binary stream
+// Convert one record from the binary stream to a human readable format
 func (b *Binlog) DecodeNext(reader io.Reader) (*LogEntry, error) {
 	indexTable, filenames := b.GetIndexTable()
 	return DecodeNext(reader, indexTable, filenames)
 }
 
-// Recover the human readable log from the binary stream
+// Convert one record from the binary stream to a human readable format
+// You want to fmt.Sprintf(LogEntry.fmtString, LogEntry.args)
 // This API is slow - relies heavily on reflection, allocates strings and slices.
 // The idea is that I will not call this API often, and when I call the API I
 // will have a serious machine dedicated to the the task
