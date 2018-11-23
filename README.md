@@ -68,5 +68,3 @@ Golang related stuff
 Add hash of the strings to the binary stream. Parse the Go sources, collect and hash all strings in calls to the binlog. Decode binary streams
 using only the source files. Should I assume that calls to the log look like xx.Log("...", arg1, ...)?
 
-Allow the application to add unique identifier to the log - a tuple [hash of the sourceFileName, line number]. Can I cache the filename/lineNumber? What if Go 
-linker dedups the strings in the executable and keeps only one copy of a string?
