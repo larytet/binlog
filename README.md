@@ -1,3 +1,4 @@
+# About
 
 This is likely the fastest possible implementation of a log in Golang or close to it
 This logger will allow you to keep logging at all times in many cases where the peformance of the official log package was too low.
@@ -34,6 +35,8 @@ Example:
 	binlog.Log("Hello %u", 10)
 }
 ```
+
+# Limitations
 
 The API is not thread safe. One prossible workaround is to have an instance of the binlog in every thread, and flush the output to a file/stdout from time to time.
 Add index and/or a timestamp all log entries and order the log entries when printing for human consumption
