@@ -1,5 +1,8 @@
 
 This is likely the fastest possible implementation of a log in Golang or close to it
+This logger will allow you to keep logging at all times in many cases where the peformance of the official log package was too low.
+The binary log is small and fast. You pay only for variadic data you send. If you output an integer you can do better than 40ns/log
+Output of an empty string (logger adds hash of the string to the binary stream) will pull you back by 10ns.
 
 
 	$ ./testall.sh 

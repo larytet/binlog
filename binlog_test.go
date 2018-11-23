@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/larytet-go/moduledata"
 	"math/rand"
+	"os"
 	"reflect"
 	"runtime"
 	"strings"
@@ -30,6 +32,52 @@ func TestStringDedup(t *testing.T) {
 		if p1 == p0 {
 			t.Fatalf("Golinker dedups strings in this environment")
 		}
+	}
+}
+
+func executableContains(filename string, moduleName string) (bool, error) {
+	filename, err := os.Executable()
+	if err != nil {
+		return false, err
+	}
+	if modules, err := moduledata.GetModules(filename); err == nil {
+		for _, m := range modules {
+			if strings.HasSuffix(m, moduleName) {
+				return true, nil
+			}
+		}
+		return false, nil
+	} else {
+		return false, err
+	}
+
+}
+
+// Test if I can fetch the module names from the ELF file in this
+// environment
+func TestGetModules(t *testing.T) {
+	filename, err := os.Executable()
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	modulename := "binlog_test.go"
+	contains, err := executableContains(filename, modulename)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if !contains {
+		t.Logf("Module %s not found in %s", modulename, filename)
+	}
+}
+
+func TestGetIndexTable(t *testing.T) {
+	filename, err := os.Executable()
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	_, _, err = GetIndexTable(filename)
+	if err != nil {
+		t.Fatalf("%v", err)
 	}
 }
 
@@ -162,26 +210,29 @@ func testPrint(t *testing.T) {
 
 	value := rand.Uint64()
 	fmtString := "Hello %d"
+	_, filename, line, _ := runtime.Caller(0)
 	err := binlog.Log(fmtString, value)
 	expected := fmt.Sprintf(fmtString, value)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
 
-	out, err := binlog.Print(&buf)
+	logEntry, err := binlog.DecodeNext(&buf)
 	if err != nil {
-		t.Fatalf("%v, %v", err, out.String())
+		t.Fatalf("%v", err)
 	}
-	actual := out.String()
-	if ADD_SOURCE_LINE {
-		if !strings.HasSuffix(actual, expected) {
-			t.Fatalf("Print failed '%s' does not contain '%s' ", actual, expected)
-		}
-	} else {
-		if expected != actual {
-			t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
-		}
+	actual := fmt.Sprintf(logEntry.fmtString, logEntry.args...)
+	if expected != actual {
+		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
+	}
 
+	if ADD_SOURCE_LINE {
+		if logEntry.filename != filename {
+			t.Fatalf("Filename is '%s', instead of '%s'", logEntry.filename, filename)
+		}
+		if logEntry.lineNumber != (line + 1) {
+			t.Fatalf("Linenumber is '%d', instead of '%d'", logEntry.lineNumber, line+1)
+		}
 	}
 }
 
@@ -214,7 +265,71 @@ func TestPrint(t *testing.T) {
 	ADD_SOURCE_LINE = false
 }
 
-func TestCacheL2(t *testing.T) {
+type testPrintIntegersParameters struct {
+	arg interface{}
+}
+
+func testPrintIntegers(t *testing.T, arg interface{}) {
+	var buf bytes.Buffer
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	binlog := Init(&buf, uint(constDataBase), uint(constDataSize))
+
+	fmtString := "Hello %d"
+	err := binlog.Log(fmtString, arg)
+	expected := fmt.Sprintf(fmtString, arg)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	logEntry, err := binlog.DecodeNext(&buf)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	actual := fmt.Sprintf(logEntry.fmtString, logEntry.args...)
+	if expected != actual {
+		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
+	}
+}
+
+func TestPrintIntegers(t *testing.T) {
+	var tests []testPrintIntegersParameters = []testPrintIntegersParameters{
+		testPrintIntegersParameters{
+			uint8(5),
+		},
+		testPrintIntegersParameters{
+			uint16(5),
+		},
+		testPrintIntegersParameters{
+			uint32(5),
+		},
+		testPrintIntegersParameters{
+			uint64(5),
+		},
+		testPrintIntegersParameters{
+			int8(5),
+		},
+		testPrintIntegersParameters{
+			int16(5),
+		},
+		testPrintIntegersParameters{
+			int32(5),
+		},
+		testPrintIntegersParameters{
+			int64(5),
+		},
+		testPrintIntegersParameters{
+			uint(5),
+		},
+		testPrintIntegersParameters{
+			int(5),
+		},
+	}
+	for _, p := range tests {
+		testPrintIntegers(t, p.arg)
+	}
+}
+
+func TestL2Cache(t *testing.T) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	binlog := Init(&buf, uint(constDataBase), uint(constDataSize))
@@ -223,29 +338,34 @@ func TestCacheL2(t *testing.T) {
 	value := rand.Uint64()
 	// dynamic allocation here
 	fmtString := fmt.Sprintf("%s %%d", "Hello")
+	_, filename, line, _ := runtime.Caller(0)
 	err := binlog.Log(fmtString, value)
 	expected := fmt.Sprintf(fmtString, value)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
 
-	out, err := binlog.Print(&buf)
+	logEntry, err := binlog.DecodeNext(&buf)
 	if err != nil {
-		t.Fatalf("%v, %v", err, out.String())
+		t.Fatalf("%v", err)
 	}
-	actual := out.String()
+
+	actual := fmt.Sprintf(logEntry.fmtString, logEntry.args...)
+	if expected != actual {
+		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
+	}
+
 	if ADD_SOURCE_LINE {
-		if !strings.HasSuffix(actual, expected) {
-			t.Fatalf("Print failed '%s' does not contain '%s' ", actual, expected)
+		if logEntry.filename != filename {
+			t.Fatalf("Filename is '%s', instead of '%s'", logEntry.filename, filename)
 		}
-	} else {
-		if expected != actual {
-			t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
+		if logEntry.lineNumber != (line + 1) {
+			t.Fatalf("Linenumber is '%d', instead of '%d'", logEntry.lineNumber, line+1)
 		}
 	}
 	statistics := binlog.GetStatistics()
-	if statistics.CacheL2Used != 1 {
-		t.Fatalf("Cache L2 used %d times instead of 1 time", statistics.CacheL2Used)
+	if statistics.L2CacheUsed != 1 {
+		t.Fatalf("Cache L2 used %d times instead of 1 time", statistics.L2CacheUsed)
 	}
 }
 
@@ -298,7 +418,7 @@ func BenchmarkSingleInt(b *testing.B) {
 	}
 }
 
-func BenchmarkSingleIntCacheL2(b *testing.B) {
+func BenchmarkSingleIntL2Cache(b *testing.B) {
 	var buf DummyIoWriter
 	buf.Grow(b.N * (8 + 4 + 4 + 8))
 	constDataBase, constDataSize := GetSelfTextAddressSize()
@@ -315,8 +435,8 @@ func BenchmarkSingleIntCacheL2(b *testing.B) {
 	if statistics.L2CacheMiss != 1 {
 		b.Fatalf("L2Cache miss is %d instead of 1", statistics.L2CacheMiss)
 	}
-	if (statistics.CacheL2Used - 1) != uint64(b.N) {
-		b.Fatalf(" L2Cache used %d times instead of %d time", statistics.CacheL2Used, b.N)
+	if (statistics.L2CacheUsed - 1) != uint64(b.N) {
+		b.Fatalf(" L2Cache used %d times instead of %d time", statistics.L2CacheUsed, b.N)
 	}
 	if statistics.L2CacheMiss != 1 {
 		b.Fatalf("L2Cache miss is %d instead of one", statistics.L1CacheMiss)

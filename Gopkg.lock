@@ -18,12 +18,21 @@
   revision = "73c449cf06350e4ac0ae5d87054697091ae65557"
   source = "github.com/larytet-go/procfs"
 
+[[projects]]
+  branch = "master"
+  digest = "1:96c168c2d18c436b54577d9dffd8248900ba715ab48436e865c7d98b51450dd1"
+  name = "github.com/larytet-go/moduledata"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "0f0080c687e84181b4aef0ebd35c5fb2f87ac6ee"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
     "github.com/jandre/procfs",
     "github.com/jandre/procfs/maps",
+    "github.com/larytet-go/moduledata",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -8,6 +8,11 @@ import (
 	"fmt"
 	"github.com/jandre/procfs"
 	"github.com/jandre/procfs/maps"
+	"github.com/larytet-go/moduledata"
+	//"strings"
+	//	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"log"
 	"os"
@@ -59,7 +64,7 @@ type Statistics struct {
 	L2CacheMiss uint64
 	L1CacheHit  uint64
 	L2CacheHit  uint64
-	CacheL2Used uint64
+	L2CacheUsed uint64
 }
 
 type Binlog struct {
@@ -147,78 +152,83 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 	return nil
 }
 
-// Recover the human readable log from the binary stream
-func (b *Binlog) Print(reader io.Reader) (bytes.Buffer, error) {
-	indexTable, filenames := b.GetIndexTable()
-	return Print(reader, indexTable, filenames)
+type LogEntry struct {
+	filename   string
+	lineNumber int
+	fmtString  string
+	args       []interface{}
 }
 
-func Print(reader io.Reader, indexTable map[uint32]*Handler, filenames map[uint16]string) (bytes.Buffer, error) {
-	var out bytes.Buffer
-	for {
-		// Read format string hash
-		var h *Handler
-		if hashUint, err := readIntegerFromReader(reader, 4); err == nil {
-			var ok bool
-			if h, ok = indexTable[uint32(hashUint)]; !ok {
-				return out, fmt.Errorf("Failed to find format string hash %x", hashUint)
-			}
-		} else if err.Error() == "EOF" {
-			return out, nil
-		} else {
-			return out, fmt.Errorf("Failed to read format string hash err=%v", err)
-		}
+// Recover the human readable log from the binary stream
+func (b *Binlog) DecodeNext(reader io.Reader) (*LogEntry, error) {
+	indexTable, filenames := b.GetIndexTable()
+	return DecodeNext(reader, indexTable, filenames)
+}
 
-		// Read format string index
-		if SEND_STRING_INDEX {
-			if index, err := readIntegerFromReader(reader, 4); err == nil {
-				if uint32(index) != h.IndexUint {
-					return out, fmt.Errorf("Mismatch of the format string index: %d instead of %d", index, h.index)
-				}
-			} else {
-				return out, fmt.Errorf("Failed to read format string index err=%v", err)
-			}
-
+// Recover the human readable log from the binary stream
+func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[uint16]string) (*LogEntry, error) {
+	var logEntry *LogEntry = &LogEntry{}
+	// Read format string hash
+	var h *Handler
+	if hashUint, err := readIntegerFromReader(reader, 4); err == nil {
+		var ok bool
+		if h, ok = indexTable[uint32(hashUint)]; !ok {
+			return nil, fmt.Errorf("Failed to find format string hash %x", hashUint)
 		}
-		if ADD_SOURCE_LINE {
-			// Read filename hash and source line number from the binary stream
-			if filenameHash, err := readIntegerFromReader(reader, 2); err == nil {
-				filename, ok := filenames[uint16(filenameHash)]
-				if !ok {
-					return out, fmt.Errorf("Failed to find filename with hash %x", filenameHash)
-				}
-				out.WriteString(filename)
-			}
-			if lineNumber, err := readIntegerFromReader(reader, 2); err == nil {
-				out.WriteString(fmt.Sprintf(":%d ", lineNumber))
-			} else {
-				return out, fmt.Errorf("Failed to read source file linenumber err=%v", err)
-			}
-		}
-
-		hFmtString := h.FmtString
-		args := make([]interface{}, 0)
-		// Read arguments from the binary stream
-		for _, hArg := range h.Args {
-			argType := hArg.ArgType
-			if isIntegral(argType) { // integer is always 64 bits
-				if value, err := readIntegerFromReader(reader, 8); err == nil {
-					args, err = appendArg(args, value, argType)
-					if err != nil {
-						return out, fmt.Errorf("Failed to read 64 bits err=%v", err)
-					}
-				} else {
-					return out, fmt.Errorf("Failed to read 64 bits err=%v", err)
-				}
-			} else {
-				return out, fmt.Errorf("Can not handle type %v", argType)
-			}
-		}
-		// format and push the log to the user output buffer
-		s := fmt.Sprintf(hFmtString, args...)
-		out.WriteString(s)
+	} else {
+		return nil, err
 	}
-	return out, nil
+
+	// Read format string index
+	if SEND_STRING_INDEX {
+		if index, err := readIntegerFromReader(reader, 4); err == nil {
+			if uint32(index) != h.IndexUint {
+				return nil, fmt.Errorf("Mismatch of the format string index: %d instead of %d", index, h.index)
+			}
+		} else {
+			return nil, fmt.Errorf("Failed to read format string index err=%v", err)
+		}
+
+	}
+	if ADD_SOURCE_LINE {
+		// Read filename hash and source line number from the binary stream
+		if filenameHash, err := readIntegerFromReader(reader, 2); err == nil {
+			filename, ok := filenames[uint16(filenameHash)]
+			if !ok {
+				return nil, fmt.Errorf("Failed to find filename with hash %x", filenameHash)
+			}
+			logEntry.filename = filename
+		}
+		if lineNumber, err := readIntegerFromReader(reader, 2); err == nil {
+			logEntry.lineNumber = int(lineNumber)
+		} else {
+			return nil, fmt.Errorf("Failed to read source file linenumber err=%v", err)
+		}
+	}
+
+	hFmtString := h.FmtString
+	args := make([]interface{}, 0)
+	// Read arguments from the binary stream
+	for _, hArg := range h.Args {
+		argType := hArg.ArgType
+		count := hArg.writer.getSize() // size of the integer I pushed into the binary stream
+		if isIntegral(argType) {
+			value, err := readIntegerFromReader(reader, count)
+			if err == nil {
+				args, err = appendArg(args, value, argType)
+				if err != nil {
+					return nil, fmt.Errorf("%v", err)
+				}
+			} else {
+				return nil, fmt.Errorf("%v", err)
+			}
+		} else {
+			return nil, fmt.Errorf("Can not handle type %v", argType)
+		}
+	}
+	logEntry.args = args
+	logEntry.fmtString = hFmtString
+	return logEntry, nil
 }
 
 // Returns a map[hash]
@@ -226,6 +236,35 @@ func Print(reader io.Reader, indexTable map[uint32]*Handler, filenames map[uint1
 // Pay attention that the map is getting updated every time a new string appears
 func (b *Binlog) GetIndexTable() (map[uint32]*Handler, map[uint16]string) {
 	return b.handlersLookupByHash, b.Filenames
+}
+
+// Depends on debug/elf package. Linux only?
+// Given an executable and the source files returns index tables required for decoding
+// of the binary logs
+// GetIndexTable() parses the ELF file, reads paths of the modules from the executable,
+// parses the sources, finds all calls to binlog.Log(), generates hashes of the format
+// strings, list of arguments
+func GetIndexTable(filename string) (map[uint32]*Handler, map[uint16]string, error) {
+	modules, err := moduledata.GetModules(filename)
+	if err != nil {
+		return nil, nil, err
+	}
+	skipped := 0
+	log.Printf("Going to process %d modules", len(modules))
+	for _, module := range modules {
+		fset := token.NewFileSet()
+		_, err := parser.ParseFile(fset, module, "", 0)
+		if err != nil {
+			//if !strings.Contains(err.Error(), "expected 'package', found 'EOF'") {
+			// log.Printf("Skipping %s, %v", module, err)
+			//}
+			skipped++
+			continue
+		}
+	}
+	log.Printf("Skipped %d modules", skipped)
+
+	return nil, nil, nil
 }
 
 func isIntegral(t reflect.Type) bool {
@@ -254,7 +293,7 @@ func readIntegerFromReader(reader io.Reader, count int) (uint64, error) {
 	slice := make([]byte, count)
 	n, err := reader.Read(slice)
 	if (n > 0) && (n != count) {
-		return 0, fmt.Errorf("%v", err)
+		return 0, fmt.Errorf("Read %d bytes instead of %d, err=%v", n, count, err)
 	} else if n == 0 {
 		return 0, fmt.Errorf("EOF")
 	}
@@ -383,7 +422,7 @@ func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*Handler, error)
 			b.handlersLookupByHash[h.HashUint] = h
 		}
 	} else {
-		b.statistics.CacheL2Used++
+		b.statistics.L2CacheUsed++
 		// log.Printf("%v, use L2Cache instead", err)
 		var ok bool
 		if h, ok = b.L2Cache[fmtStr]; ok {
@@ -419,6 +458,8 @@ func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*Handler, error)
 	return h, nil
 }
 
+// Cast the integer argument to uint64 and call a "writer"
+// The "writer" knows how many bytes to add to the binary stream
 func (b *Binlog) writeArgumentToOutput(writer writer, arg interface{}, argKind reflect.Kind) error {
 	// unsafe pointer to the data depends on the data type
 	var err error

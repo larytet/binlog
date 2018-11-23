@@ -38,3 +38,7 @@
 [[constraint]]
   branch = "master"
   name = "github.com/larytet/sprintf"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/larytet-go/moduledata"
