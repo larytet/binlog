@@ -176,8 +176,8 @@ func (b *Binlog) DecodeNext(reader io.Reader) (*LogEntry, error) {
 // 3. Read arguments from the binary stream
 func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[uint16]string) (*LogEntry, error) {
 	var logEntry *LogEntry = &LogEntry{}
-	// Read format string hash
 	var h *Handler
+	// Read format string hash
 	if hashUint, err := readIntegerFromReader(reader, 4); err == nil {
 		var ok bool
 		if h, ok = indexTable[uint32(hashUint)]; !ok {
@@ -187,8 +187,8 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 		return nil, err
 	}
 
-	// Read format string index
 	if SEND_STRING_INDEX {
+		// Read format string index
 		if index, err := readIntegerFromReader(reader, 4); err == nil {
 			if uint32(index) != h.IndexUint {
 				return nil, fmt.Errorf("Mismatch of the format string index: %d instead of %d", index, h.index)
