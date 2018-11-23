@@ -129,7 +129,7 @@ func TestStringLocationGlobalLocal(t *testing.T) {
 func TestReadme(t *testing.T) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := Init(&buf, uint(constDataBase), uint(constDataSize))
+	binlog := Init(&buf, constDataBase, constDataSize)
 	binlog.Log("Hello %d", 10)
 }
 

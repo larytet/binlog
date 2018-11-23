@@ -31,7 +31,7 @@ Example:
 {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := Init(&buf, uint(constDataBase), uint(constDataSize))
+	binlog := Init(&buf, constDataBase, constDataSize)
 	binlog.Log("Hello %u", 10)
 }
 ```
