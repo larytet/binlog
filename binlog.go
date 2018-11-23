@@ -9,8 +9,7 @@ import (
 	"github.com/jandre/procfs"
 	"github.com/jandre/procfs/maps"
 	"github.com/larytet-go/moduledata"
-	//"strings"
-	//	"go/ast"
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
@@ -18,6 +17,7 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"unicode/utf8"
 	"unsafe"
@@ -238,31 +238,98 @@ func (b *Binlog) GetIndexTable() (map[uint32]*Handler, map[uint16]string) {
 	return b.handlersLookupByHash, b.Filenames
 }
 
-// Depends on debug/elf package. Linux only?
+type astVisitor struct {
+	fmtStrings []string
+}
+
+func (v *astVisitor) Init() {
+	v.fmtStrings = make([]string, 0)
+}
+
+func (v astVisitor) Visit(n ast.Node) ast.Visitor {
+	if n == nil {
+		return nil
+	}
+	var packageName string
+	var functionName string
+	var args []ast.Expr
+	var fmtString string
+	switch astCallExpr := n.(type) {
+	case *ast.CallExpr:
+		switch astSelectExpr := astCallExpr.Fun.(type) {
+		case *ast.SelectorExpr:
+			switch astSelectExprX := astSelectExpr.X.(type) {
+			case *ast.Ident:
+				packageName = astSelectExprX.Name
+			}
+			astSelectExprSel := astSelectExpr.Sel
+			functionName = astSelectExprSel.Name
+		}
+		args = astCallExpr.Args
+	}
+	if (packageName != "binlog") || (functionName != "Log") {
+		return v
+	}
+	if len(args) < 1 {
+		return v
+	}
+	switch arg0 := (args[0]).(type) {
+	case *ast.BasicLit:
+		fmtString = arg0.Value
+		v.fmtStrings = append(v.fmtStrings, fmtString)
+		log.Printf("%v", v.fmtStrings)
+	}
+	return v
+}
+
+func collectBinlogArguments(astFile *ast.File) (*astVisitor, error) {
+	//decls := astFile.Decls
+	var v astVisitor
+	(&v).Init()
+	ast.Walk(v, astFile)
+	return &v, nil
+}
+
+// This function is a work in progress, requires walking the Go AST
+//
+// Depends on debug/elf package, go/parse and go/ast packages
 // Given an executable and the source files returns index tables required for decoding
 // of the binary logs
 // GetIndexTable() parses the ELF file, reads paths of the modules from the executable,
 // parses the sources, finds all calls to binlog.Log(), generates hashes of the format
 // strings, list of arguments
+// See also http://goast.yuroyoro.net/
+// https://stackoverflow.com/questions/46115312/use-ast-to-get-all-function-calls-in-a-function
 func GetIndexTable(filename string) (map[uint32]*Handler, map[uint16]string, error) {
-	modules, err := moduledata.GetModules(filename)
+	allModules, err := moduledata.GetModules(filename)
 	if err != nil {
 		return nil, nil, err
 	}
+	goModules := make([]string, 0)
+	for _, module := range allModules {
+		if strings.HasSuffix(module, ".go") {
+			goModules = append(goModules, module)
+		}
+	}
 	skipped := 0
-	log.Printf("Going to process %d modules", len(modules))
-	for _, module := range modules {
+	log.Printf("Going to process %d Go modules", len(goModules))
+	for _, module := range goModules {
 		fset := token.NewFileSet()
-		_, err := parser.ParseFile(fset, module, "", 0)
+		astFile, err := parser.ParseFile(fset, module, nil, 0)
 		if err != nil {
-			//if !strings.Contains(err.Error(), "expected 'package', found 'EOF'") {
-			// log.Printf("Skipping %s, %v", module, err)
-			//}
+			log.Printf("Skipping %s, %v", module, err)
 			skipped++
 			continue
 		}
+		astVisitor, err := collectBinlogArguments(astFile)
+		foundFmtStrings := len(astVisitor.fmtStrings)
+		if foundFmtStrings > 0 {
+			log.Printf("Found %d matches", foundFmtStrings)
+		}
 	}
-	log.Printf("Skipped %d modules", skipped)
+	if skipped != 0 {
+		log.Printf("Skipped %d modules", skipped)
+	}
 
 	return nil, nil, nil
 }
