@@ -169,6 +169,11 @@ func (b *Binlog) DecodeNext(reader io.Reader) (*LogEntry, error) {
 // This API is slow - relies heavily on reflection, allocates strings and slices.
 // The idea is that I will not call this API often, and when I call the API I
 // will have a serious machine dedicated to the the task
+//
+// Decoding of the binary log is a three steps process:
+// 1. Read 4 bytes hash from the stream
+// 2. find the format string and arguments in the L1 or L2 cache
+// 3. Read arguments from the binary stream
 func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[uint16]string) (*LogEntry, error) {
 	var logEntry *LogEntry = &LogEntry{}
 	// Read format string hash
