@@ -43,7 +43,7 @@ I did not test for Windows. Relies on the facts that
 
 Deduplication of the strings is a real possibility in the future. Deduplication is a trivial thing to implement given the Go AST. If Go starts to dedup the strings I 
 will need a larger key in the cache than just an address of the string. This will seriously impact the performance. If you care about fast logging
-make sure to vote/post comment here https://github.com/golang/go/issues/28864. May be one day "log" package wiill cache the strings and have a binary outuptu 
+make sure to vote/post comment here https://github.com/golang/go/issues/28864. May be one day "log" package wiill cache the strings and support a binary outuptu 
 as well. 
 
 
