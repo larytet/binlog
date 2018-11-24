@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/larytet-go/moduledata"
+	"github.com/larytet-go/sprintf"
 	"math/rand"
 	"os"
 	"reflect"
@@ -369,6 +370,40 @@ func TestL2Cache(t *testing.T) {
 	}
 }
 
+func TestPrint2Ints(t *testing.T) {
+	var buf bytes.Buffer
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	binlog := Init(&buf, uint(constDataBase), uint(constDataSize))
+	rand.Seed(42)
+
+	value := rand.Uint64()
+	fmtString := "Hello %d %d"
+	_, filename, line, _ := runtime.Caller(0)
+	err := binlog.Log(fmtString, value, value)
+	expected := fmt.Sprintf(fmtString, value, value)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	logEntry, err := binlog.DecodeNext(&buf)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	actual := fmt.Sprintf(logEntry.fmtString, logEntry.args...)
+	if expected != actual {
+		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
+	}
+
+	if ADD_SOURCE_LINE {
+		if logEntry.filename != filename {
+			t.Fatalf("Filename is '%s', instead of '%s'", logEntry.filename, filename)
+		}
+		if logEntry.lineNumber != (line + 1) {
+			t.Fatalf("Linenumber is '%d', instead of '%d'", logEntry.lineNumber, line+1)
+		}
+	}
+}
+
 type DummyIoWriter struct {
 }
 
@@ -384,6 +419,7 @@ func BenchmarkEmptyString(b *testing.B) {
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	fmtString := "Hello"
 	binlog := Init(&buf, constDataBase, constDataSize)
+	// Cache the first entry
 	binlog.Log(fmtString)
 	b.ResetTimer()
 
@@ -410,12 +446,14 @@ func BenchmarkSingleInt(b *testing.B) {
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	fmtString := "Hello %d"
 	binlog := Init(&buf, constDataBase, constDataSize)
+	// Cache the first entry
 	binlog.Log(fmtString, 10)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		binlog.Log(fmtString, 10)
 	}
+	b.StopTimer()
 }
 
 func BenchmarkSingleIntL2Cache(b *testing.B) {
@@ -424,6 +462,7 @@ func BenchmarkSingleIntL2Cache(b *testing.B) {
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	fmtString := fmt.Sprintf("%s %%d", "Hello")
 	binlog := Init(&buf, constDataBase, constDataSize)
+	// Cache the first entry
 	binlog.Log(fmtString, 10)
 	b.ResetTimer()
 
@@ -441,4 +480,69 @@ func BenchmarkSingleIntL2Cache(b *testing.B) {
 	if statistics.L2CacheMiss != 1 {
 		b.Fatalf("L2Cache miss is %d instead of one", statistics.L1CacheMiss)
 	}
+}
+
+func Benchmark2Ints(b *testing.B) {
+	var buf DummyIoWriter
+	buf.Grow(b.N * (8 + 4 + 4 + 8))
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	fmtString := "Hello %d %d"
+	binlog := Init(&buf, constDataBase, constDataSize)
+	args := []interface{}{10, 20}
+	// Cache the first entry
+	binlog.Log(fmtString, args...)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		binlog.Log(fmtString, args...)
+	}
+	b.StopTimer()
+}
+
+func Benchmark3Ints(b *testing.B) {
+	var buf DummyIoWriter
+	buf.Grow(b.N * (8 + 4 + 4 + 8))
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	fmtString := "Hello %d %d %d"
+	binlog := Init(&buf, constDataBase, constDataSize)
+	args := []interface{}{10, 20, 30}
+	// Cache the first entry
+	binlog.Log(fmtString, args...)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		binlog.Log(fmtString, args...)
+	}
+	b.StopTimer()
+	if b.N >= 20000000 {
+		statistics := binlog.GetStatistics()
+		b.Logf("\n%s\n\n", sprintf.SprintfStructure(statistics, 4, "  %15s %9d", nil))
+	}
+}
+
+func BenchmarkFmtFprintf3Ints(b *testing.B) {
+	var buf DummyIoWriter
+	buf.Grow(b.N * (8 + 4 + 4 + 8))
+	fmtString := "Hello %d %d %d"
+	args := []interface{}{10, 20, 30}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		fmt.Fprintf(&buf, fmtString, args...)
+	}
+	b.StopTimer()
+}
+
+func BenchmarkFmtSprintf3Ints(b *testing.B) {
+	var buf DummyIoWriter
+	buf.Grow(b.N * (8 + 4 + 4 + 8))
+	fmtString := "Hello %d %d %d"
+	args := []interface{}{10, 20, 30}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		s := fmt.Sprintf(fmtString, args...)
+		buf.Write([]byte(s))
+	}
+	b.StopTimer()
 }

@@ -60,11 +60,13 @@ type Handler struct {
 }
 
 type Statistics struct {
-	L1CacheMiss uint64
-	L2CacheMiss uint64
-	L1CacheHit  uint64
-	L2CacheHit  uint64
-	L2CacheUsed uint64
+	L1CacheMiss    uint64
+	L2CacheMiss    uint64
+	L1CacheHit     uint64
+	L2CacheHit     uint64
+	L2CacheUsed    uint64
+	StringOffsetOk uint64
+	StringOOM      uint64
 }
 
 type Binlog struct {
@@ -426,12 +428,17 @@ func getStringAddress(s string) uint {
 }
 
 // Return index of the string given the string address
-func (b *Binlog) getStringIndex(s string) (uint, error) {
+// Returning one integer shaves 10% off the overall vs return uint, error
+// Golang inlines this function?
+func (b *Binlog) getStringIndex(s string) uint {
 	sDataOffset := (getStringAddress(s) - b.constDataBase) / ALIGNMENT
 	if sDataOffset < b.constDataSize {
-		return sDataOffset, nil
+		b.statistics.StringOffsetOk++
+		return sDataOffset
 	} else {
-		return b.constDataSize, fmt.Errorf("String %x is out of address range %x-%x", getStringAddress(s), b.constDataBase, b.constDataBase+b.constDataSize*ALIGNMENT)
+		b.statistics.StringOOM++
+		// fmt.Errorf("String %x is out of address range %x-%x", getStringAddress(s), b.constDataBase, b.constDataBase+b.constDataSize*ALIGNMENT)
+		return b.constDataSize
 	}
 }
 
@@ -481,7 +488,7 @@ func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*Handler, error)
 	var err error
 	var sIndex uint
 	var isMiss bool = false
-	sIndex, _ = b.getStringIndex(fmtStr)
+	sIndex = b.getStringIndex(fmtStr)
 	if sIndex != b.constDataSize {
 		h = b.L1Cache[sIndex]
 		if h != nil { // fast cache hit? (20% of the whole function is here. Blame CPU data cache?)
@@ -536,6 +543,8 @@ func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*Handler, error)
 
 // Cast the integer argument to uint64 and call a "writer"
 // The "writer" knows how many bytes to add to the binary stream
+// Type casts from interface{} to integer consume 40% of the overall
+// time. Can I do better? What is interface{} in Golang?
 func (b *Binlog) writeArgumentToOutput(writer writer, arg interface{}, argKind reflect.Kind) error {
 	// unsafe pointer to the data depends on the data type
 	var err error

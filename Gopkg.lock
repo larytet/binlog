@@ -26,6 +26,14 @@
   pruneopts = "UT"
   revision = "0f0080c687e84181b4aef0ebd35c5fb2f87ac6ee"
 
+[[projects]]
+  branch = "master"
+  digest = "1:781d208516598969927df965e674282b85c0e4410df7d3dc71b5f73daa528c61"
+  name = "github.com/larytet-go/sprintf"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "c9a4d9310a7641bcd9ce53a84cd266d35d24c147"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
@@ -33,6 +41,7 @@
     "github.com/jandre/procfs",
     "github.com/jandre/procfs/maps",
     "github.com/larytet-go/moduledata",
+    "github.com/larytet-go/sprintf",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
