@@ -36,7 +36,9 @@ Example:
 
 # Limitations
 
-I did not test for Windows. Relies on the facts that
+I did not test for Windows. 
+
+The code relies on the facts that:
  
 *  the strings in Go are located in the same ELF file segment.
 *  Elf has a unique address for every string in the source code.
