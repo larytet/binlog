@@ -21,7 +21,7 @@ The performance of the API is on par ("just" 2-3x slower) with C++ binary logs l
 The original idea is https://github.com/ScottMansfield/nanolog/issues/4
 
 Warning! This code pushes Go quite to it's limit. There are unsafe pointers, ATS walk, StringHeader and
-other explicitly-forbidden/not-best-practice/makes-me-sick things galore for taste of many.
+other explicitly-forbidden/anti-pattern/not-best-practice/makes-me-sick things galore for taste of many. 
 
 Example:
 
