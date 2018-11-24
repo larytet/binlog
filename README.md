@@ -39,7 +39,13 @@ Example:
 I did not test for Windows. Relies on the facts that
  
 *  the strings in Go are located in the same ELF file segment.
-*  Go compiler does not remove duplicate strings
+*  Go compiler does not remove duplicate strings. Elf has a unique address for every string in the source code.
+
+Deduplication of the strings is a real possibility in the future. It is a trivial thing to implement given the Go AST. If Go starts to dedup the strings I 
+will need a larger key in the cache than just an address of the string. This will seriously impact the performance. If you care about fast logging
+make sure to vote/post comment here https://github.com/golang/go/issues/28864. May be one day "log" package wiill cache the strings and have a binary outuptu 
+as well. 
+
 
 The API is not thread safe. One prossible workaround is to have an instance of the binlog in every thread, and flush the output to a file/stdout from time to time.
 Add index and/or a timestamp to all log entries, order the log entries when printing for human consumption
