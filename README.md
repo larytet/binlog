@@ -50,8 +50,8 @@ as well.
 The API is not thread safe. One prossible workaround is to have an instance of the binlog in every thread, and flush the output to a file/stdout from time to time.
 Add index and/or a timestamp to all log entries, order the log entries when printing for human consumption
 
-This logger will not work well for applications which allocate format strings dynamically, like in the code below. The performance will be roughly 
-the same as in ZAP log & some of it's fast friends.  
+This logger will not work well for applications which allocate format strings dynamically, like in the code below. The performance will be similar to 
+ZAP log & some of it's faster friends.  
 
 ```Go
 {
