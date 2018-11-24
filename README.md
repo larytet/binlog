@@ -36,7 +36,10 @@ Example:
 
 # Limitations
 
-I did not test for Windows. Relies on the fact that the strings in Go are located in the same ELF file segment. 
+I did not test for Windows. Relies on the facts that
+ 
+*  the strings in Go are located in the same ELF file segment.
+*  Go compiler does not remove duplicate strings
 
 The API is not thread safe. One prossible workaround is to have an instance of the binlog in every thread, and flush the output to a file/stdout from time to time.
 Add index and/or a timestamp to all log entries, order the log entries when printing for human consumption
