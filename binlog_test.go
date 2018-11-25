@@ -222,22 +222,23 @@ func testPrint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	actual := fmt.Sprintf(logEntry.fmtString, logEntry.args...)
+	actual := fmt.Sprintf(logEntry.FmtString, logEntry.Args...)
 	if expected != actual {
 		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
 	}
 
 	if ADD_SOURCE_LINE {
-		if logEntry.filename != filename {
-			t.Fatalf("Filename is '%s', instead of '%s'", logEntry.filename, filename)
+		if logEntry.Filename != filename {
+			t.Fatalf("Filename is '%s', instead of '%s'", logEntry.Filename, filename)
 		}
-		if logEntry.lineNumber != (line + 1) {
-			t.Fatalf("Linenumber is '%d', instead of '%d'", logEntry.lineNumber, line+1)
+		if logEntry.LineNumber != (line + 1) {
+			t.Fatalf("Linenumber is '%d', instead of '%d'", logEntry.LineNumber, line+1)
 		}
 	}
 }
 
 type testParameters struct {
+	sendLogIndex    bool
 	sendStringIndex bool
 	addSourceLine   bool
 }
@@ -245,25 +246,38 @@ type testParameters struct {
 func TestPrint(t *testing.T) {
 	var tests []testParameters = []testParameters{
 		testParameters{
-			false, false,
+			false, false, true,
 		},
 		testParameters{
-			false, true,
+			false, true, false,
 		},
 		testParameters{
-			true, false,
+			false, true, true,
 		},
 		testParameters{
-			true, true,
+			true, false, false,
+		},
+		testParameters{
+			true, false, true,
+		},
+		testParameters{
+			true, true, false,
+		},
+		testParameters{
+			true, true, true,
+		},
+
+		// Last test is all FALSE
+		testParameters{
+			false, false, false,
 		},
 	}
 	for _, p := range tests {
+		SEND_LOG_INDEX = p.sendLogIndex
 		SEND_STRING_INDEX = p.sendStringIndex
 		ADD_SOURCE_LINE = p.addSourceLine
 		testPrint(t)
 	}
-	SEND_STRING_INDEX = false
-	ADD_SOURCE_LINE = false
 }
 
 type testPrintIntegersParameters struct {
@@ -286,7 +300,7 @@ func testPrintIntegers(t *testing.T, arg interface{}) {
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	actual := fmt.Sprintf(logEntry.fmtString, logEntry.args...)
+	actual := fmt.Sprintf(logEntry.FmtString, logEntry.Args...)
 	if expected != actual {
 		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
 	}
@@ -351,17 +365,17 @@ func TestL2Cache(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 
-	actual := fmt.Sprintf(logEntry.fmtString, logEntry.args...)
+	actual := fmt.Sprintf(logEntry.FmtString, logEntry.Args...)
 	if expected != actual {
 		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
 	}
 
 	if ADD_SOURCE_LINE {
-		if logEntry.filename != filename {
-			t.Fatalf("Filename is '%s', instead of '%s'", logEntry.filename, filename)
+		if logEntry.Filename != filename {
+			t.Fatalf("Filename is '%s', instead of '%s'", logEntry.Filename, filename)
 		}
-		if logEntry.lineNumber != (line + 1) {
-			t.Fatalf("Linenumber is '%d', instead of '%d'", logEntry.lineNumber, line+1)
+		if logEntry.LineNumber != (line + 1) {
+			t.Fatalf("Linenumber is '%d', instead of '%d'", logEntry.LineNumber, line+1)
 		}
 	}
 	statistics := binlog.GetStatistics()
@@ -389,17 +403,17 @@ func TestPrint2Ints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	actual := fmt.Sprintf(logEntry.fmtString, logEntry.args...)
+	actual := fmt.Sprintf(logEntry.FmtString, logEntry.Args...)
 	if expected != actual {
 		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
 	}
 
 	if ADD_SOURCE_LINE {
-		if logEntry.filename != filename {
-			t.Fatalf("Filename is '%s', instead of '%s'", logEntry.filename, filename)
+		if logEntry.Filename != filename {
+			t.Fatalf("Filename is '%s', instead of '%s'", logEntry.Filename, filename)
 		}
-		if logEntry.lineNumber != (line + 1) {
-			t.Fatalf("Linenumber is '%d', instead of '%d'", logEntry.lineNumber, line+1)
+		if logEntry.LineNumber != (line + 1) {
+			t.Fatalf("Linenumber is '%d', instead of '%d'", logEntry.LineNumber, line+1)
 		}
 	}
 }
@@ -518,6 +532,25 @@ func Benchmark3Ints(b *testing.B) {
 		statistics := binlog.GetStatistics()
 		b.Logf("\n%s\n\n", sprintf.SprintfStructure(statistics, 4, "  %15s %9d", nil))
 	}
+}
+
+func Benchmark3IntsLogIndex(b *testing.B) {
+	var buf DummyIoWriter
+	buf.Grow(b.N * (8 + 4 + 4 + 8))
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	fmtString := "Hello %d %d %d"
+	binlog := Init(&buf, constDataBase, constDataSize)
+	args := []interface{}{10, 20, 30}
+	// Cache the first entry
+	binlog.Log(fmtString, args...)
+	SEND_LOG_INDEX = true
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		binlog.Log(fmtString, args...)
+	}
+	b.StopTimer()
+	SEND_LOG_INDEX = false
 }
 
 func BenchmarkFmtFprintf3Ints(b *testing.B) {

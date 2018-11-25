@@ -22,7 +22,7 @@ The performance of the API is on par ("just" 2-3x slower) with C++ binary logs l
 The original idea is https://github.com/ScottMansfield/nanolog/issues/4
 
 Warning! This code pushes Go quite to it's limit. There are unsafe pointers, ATS walk, StringHeader and
-other explicitly-forbidden/anti-pattern/not-best-practice/makes-me-sick things galore for taste of many. 
+other explicitly-forbidden/anti-pattern/not-best-practice/makes-me-sick things galore for the taste of many. 
 
 Example:
 
@@ -63,6 +63,10 @@ ZAP log & some of it's faster friends.
 }
 ```
 
+The following popular formats are not supported: "%v", "%T", "%s"
+
+
+
 # Links
 
 More benchmark for different logging frameworks (Spoiler: NOP loggers which do nothing require 100ns/op)
@@ -77,6 +81,7 @@ Golang related stuff
 * https://stackoverflow.com/questions/50524607/go-lang-func-parameter-type
 * https://stackoverflow.com/questions/46115312/use-ast-to-get-all-function-calls-in-a-function
 * https://github.com/uber-go/zap/issues/653
+* https://groups.google.com/forum/#!topic/golang-nuts/Og8s9Y-Kif4
 
 
 # Todo
@@ -84,3 +89,6 @@ Golang related stuff
 Add hash of the strings to the binary stream. Parse the Go sources, collect and hash all strings in calls to the binlog. Decode binary streams
 using only the source files. Should I assume that calls to the log look like xx.Log("...", arg1, ...)?
 
+Add suport for "string", "float"
+
+Optimize "writeArgumentToOutput"

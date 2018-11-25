@@ -23,6 +23,11 @@ import (
 	"unsafe"
 )
 
+import "C"
+
+// Add unique system level running counter of logs
+var SEND_LOG_INDEX bool = false
+
 // I keep hash of the format string and index of the string in the
 // cache. When I decode the binary stream I can ensure that both 32 bits hash
 // and index of the string match. This flag is useful for debug or fast lookup
@@ -34,6 +39,8 @@ var SEND_STRING_INDEX bool = false
 // I assume the the goloang does not dedups the constant strings and all
 // calls to the Log() use unique string. There is a test which ensures this
 var ADD_SOURCE_LINE bool = false
+
+var binlogIndex uint64
 
 type HandlerArg struct {
 	writer  writer
@@ -121,7 +128,7 @@ func (b *Binlog) GetStatistics() Statistics {
 	return b.statistics
 }
 
-// similar to b.ioWriter.Write([]byte(fmt.Printf(fmtStr, args)))
+// This is similar to fmt.Fprintf(b.ioWriter, fmtStr, args)
 func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 	h, err := b.getHandler(fmtStr, args)
 	if err != nil {
@@ -143,11 +150,16 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 		b.ioWriter.Write(h.lineNumber)
 	}
 
+	if SEND_LOG_INDEX {
+		logIndex := atomic.AddUint64(&binlogIndex, 1)
+		writer := writerByteArray{count: 8}
+		(&writer).write(b.ioWriter, unsafe.Pointer(&logIndex))
+	}
+
 	for i, arg := range args {
 		hArg := h.Args[i]
 		writer := hArg.writer
-		argKind := hArg.ArgKind
-		if err := b.writeArgumentToOutput(writer, arg, argKind); err != nil {
+		if err := b.writeArgumentToOutput(writer, arg); err != nil {
 			return fmt.Errorf("Failed to write value %v", err)
 		}
 	}
@@ -155,10 +167,11 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 }
 
 type LogEntry struct {
-	filename   string
-	lineNumber int
-	fmtString  string
-	args       []interface{}
+	Filename   string
+	LineNumber int
+	FmtString  string
+	Args       []interface{}
+	Index      uint64
 }
 
 // Convert one record from the binary stream to a human readable format
@@ -199,7 +212,6 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 		} else {
 			return nil, fmt.Errorf("Failed to read format string index err=%v", err)
 		}
-
 	}
 	if ADD_SOURCE_LINE {
 		// Read filename hash and source line number from the binary stream
@@ -208,12 +220,20 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 			if !ok {
 				return nil, fmt.Errorf("Failed to find filename with hash %x", filenameHash)
 			}
-			logEntry.filename = filename
+			logEntry.Filename = filename
 		}
 		if lineNumber, err := readIntegerFromReader(reader, 2); err == nil {
-			logEntry.lineNumber = int(lineNumber)
+			logEntry.LineNumber = int(lineNumber)
 		} else {
 			return nil, fmt.Errorf("Failed to read source file linenumber err=%v", err)
+		}
+	}
+	if SEND_LOG_INDEX {
+		// Read log index - running counter of logs
+		if logEntryIndex, err := readIntegerFromReader(reader, 8); err == nil {
+			logEntry.Index = logEntryIndex
+		} else {
+			return nil, fmt.Errorf("Failed to read log index err=%v", err)
 		}
 	}
 
@@ -237,8 +257,8 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 			return nil, fmt.Errorf("Can not handle type %v", argType)
 		}
 	}
-	logEntry.args = args
-	logEntry.fmtString = hFmtString
+	logEntry.Args = args
+	logEntry.FmtString = hFmtString
 	return logEntry, nil
 }
 
@@ -541,43 +561,63 @@ func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*Handler, error)
 	return h, nil
 }
 
+func (b *Binlog) writeArgumentToOutput_0(writer writer, arg interface{}) error {
+	var err error
+	rv := reflect.ValueOf(arg)
+	var v uint64
+	if k := rv.Kind(); k >= reflect.Int && k < reflect.Uint {
+		v = uint64(rv.Int())
+		err = writer.write(b.ioWriter, unsafe.Pointer(&v))
+	} else if k <= reflect.Uintptr {
+		v = rv.Uint()
+		err = writer.write(b.ioWriter, unsafe.Pointer(&v))
+	} else {
+		return fmt.Errorf("Unsupported type: %T\n", reflect.TypeOf(arg))
+	}
+	/* write v */
+	return err
+}
+
 // Cast the integer argument to uint64 and call a "writer"
 // The "writer" knows how many bytes to add to the binary stream
+//
 // Type casts from interface{} to integer consume 40% of the overall
 // time. Can I do better? What is interface{} in Golang?
-func (b *Binlog) writeArgumentToOutput(writer writer, arg interface{}, argKind reflect.Kind) error {
+// Switching to args *[]interface makes the performance 2x worse
+// See also https://groups.google.com/forum/#!topic/golang-nuts/Og8s9Y-Kif4
+func (b *Binlog) writeArgumentToOutput(writer writer, arg interface{}) error {
 	// unsafe pointer to the data depends on the data type
 	var err error
-	switch argKind {
-	case reflect.Int8:
-		i := uint64(arg.(int8))
+	switch arg := arg.(type) {
+	case int:
+		i := uint64(arg)
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Int16:
-		i := uint64(arg.(int16))
+	case int8:
+		i := uint64(arg)
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Int32:
-		i := uint64(arg.(int32))
+	case int16:
+		i := uint64(arg)
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Int64:
-		i := uint64(arg.(int64))
+	case int32:
+		i := uint64(arg)
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Uint8:
-		i := uint64(arg.(uint8))
+	case int64:
+		i := uint64(arg)
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Uint16:
-		i := uint64(arg.(uint16))
+	case uint8:
+		i := uint64(arg)
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Uint32:
-		i := uint64(arg.(uint32))
+	case uint16:
+		i := uint64(arg)
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Uint64:
-		i := uint64(arg.(uint64))
+	case uint32:
+		i := uint64(arg)
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Int:
-		i := uint64(arg.(int))
+	case uint64:
+		i := uint64(arg)
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
-	case reflect.Uint:
-		i := uint64(arg.(uint))
+	case uint:
+		i := uint64(arg)
 		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
 	default:
 		return fmt.Errorf("Unsupported type: %T\n", reflect.TypeOf(arg))
