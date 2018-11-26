@@ -27,10 +27,17 @@ other explicitly-forbidden/anti-pattern/not-best-practice/makes-me-sick things g
 Example:
 
 ```Go
-{
+package main
+
+import (
+	"bytes"
+	"github.com/larytet/binlog"
+)
+
+func main() {
 	var buf bytes.Buffer
-	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := Init(&buf, constDataBase, constDataSize)
+	constDataBase, constDataSize := binlog.GetSelfTextAddressSize()
+	binlog := binlog.Init(&buf, constDataBase, constDataSize)
 	binlog.Log("Hello %u", 10)
 }
 ```
