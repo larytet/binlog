@@ -578,6 +578,46 @@ func (b *Binlog) writeArgumentToOutput_0(writer writer, arg interface{}) error {
 	return err
 }
 
+func (b *Binlog) writeArgumentToOutput_1(writer writer, arg interface{}) error {
+	// unsafe pointer to the data depends on the data type
+	var err error
+	switch arg := arg.(type) {
+	case int:
+		i := uint64(arg)
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case int8:
+		i := uint64(arg)
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case int16:
+		i := uint64(arg)
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case int32:
+		i := uint64(arg)
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case int64:
+		i := uint64(arg)
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case uint8:
+		i := uint64(arg)
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case uint16:
+		i := uint64(arg)
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case uint32:
+		i := uint64(arg)
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case uint64:
+		i := uint64(arg)
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	case uint:
+		i := uint64(arg)
+		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+	default:
+		return fmt.Errorf("Unsupported type: %T\n", reflect.TypeOf(arg))
+	}
+	return err
+}
+
 // According to https://github.com/golang/go/issues/24582 "interface
 // is a structure with two fields - type and reference to the data
 type iface struct {
@@ -595,7 +635,7 @@ func getInterfaceData(arg interface{}) unsafe.Pointer {
 // Type casts from interface{} to integer consume 40% of the overall
 // time. Can I do better? What is interface{} in Golang?
 // Switching to args *[]interface makes the performance 2x worse
-// Before you jump to conlusions see
+// Before you jump to conclusions see
 // https://groups.google.com/forum/#!topic/golang-nuts/Og8s9Y-Kif4
 func (b *Binlog) writeArgumentToOutput(writer writer, arg interface{}) error {
 	// unsafe pointer to the data depends on the data type
