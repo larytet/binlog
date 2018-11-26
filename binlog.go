@@ -674,6 +674,7 @@ func (b *Binlog) writeArgumentToOutput(writer writer, arg interface{}) error {
 	return err
 }
 
+// Should I call fmt package here?
 func parseLogLine(gold string, args []interface{}) ([]*HandlerArg, error) {
 	tmp := gold
 	f := &tmp
