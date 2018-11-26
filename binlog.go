@@ -44,7 +44,7 @@ var binlogIndex uint64
 
 type HandlerArg struct {
 	writer  writer
-	FmtCode rune         // for example, x (from %x)
+	FmtVerb rune         // for example, x (from %x)
 	ArgType reflect.Type // type of the argument, for example int32
 	ArgKind reflect.Kind // type of the argument, for example int32
 }
@@ -674,6 +674,7 @@ func (b *Binlog) writeArgumentToOutput(writer writer, arg interface{}) error {
 	return err
 }
 
+// Parse the format string, collect argument types, format verbs
 // Should I call fmt package here?
 func parseLogLine(gold string, args []interface{}) ([]*HandlerArg, error) {
 	tmp := gold
@@ -706,11 +707,11 @@ func parseLogLine(gold string, args []interface{}) ([]*HandlerArg, error) {
 		switch r {
 		case 'x', 'd', 'i', 'c':
 			writer := &writerByteArray{count: count}
-			hArg := &HandlerArg{writer: writer, ArgType: argType, FmtCode: r, ArgKind: argKind}
+			hArg := &HandlerArg{writer: writer, ArgType: argType, FmtVerb: r, ArgKind: argKind}
 			hArgs = append(hArgs, hArg)
 		case 's':
 			writer := &writerString{}
-			hArg := &HandlerArg{writer: writer, ArgType: argType, FmtCode: r, ArgKind: argKind}
+			hArg := &HandlerArg{writer: writer, ArgType: argType, FmtVerb: r, ArgKind: argKind}
 			hArgs = append(hArgs, hArg)
 		default:
 			return nil, fmt.Errorf("Can not handle '%c' in %s: unknown format code", r, gold)
