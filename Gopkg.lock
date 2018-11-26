@@ -22,7 +22,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:a92b7394ae423bb0b4c48b9b5bf8ce9f87c61cc79ba2f170113672f974721cdd"
+  digest = "1:0a81110807866c510f1a4ce1cc1a8a5f747de438686e552a0885a5227d3f2442"
   name = "github.com/larytet-go/procfs"
   packages = [
     ".",
@@ -30,9 +30,10 @@
     "maps",
     "stat",
     "statm",
+    "util",
   ]
   pruneopts = "UT"
-  revision = "faeaede2364331259a600292a1ff95baa0eefb3f"
+  revision = "c90f8fe23a18f70be2d15af0db1f35788d705cb2"
 
 [[projects]]
   branch = "master"

@@ -709,17 +709,6 @@ func GetSelfTextAddressSize() (constDataBase uint, constDataSize uint) {
 
 }
 
-// Package "procfs"  lacks any printing facilities and my pull requests
-// are getting ignored.
-// TODO move the API to the forked procfs
-func SprintfMaps(maps []*maps.Maps) string {
-	s := ""
-	for _, m := range maps {
-		s = s + fmt.Sprintf("\n%v", (*m))
-	}
-	return s
-}
-
 var defaultHandler Handler
 
 type writer interface {
