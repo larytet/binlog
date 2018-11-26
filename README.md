@@ -6,16 +6,20 @@ The binary log is small and fast. You pay only for variadic data you send.
 Output of a string without variadic arguments (logger adds hash of the string to the binary stream) will set you back by 15ns.
 Every additional argument of the integral type costs ~10ns. binlog.Log() is 3x faster than fmt.Fprintf() API
 
-
-	$ ./testall.sh 
-	goos: linux
-	goarch: amd64
-	pkg: binlog
-	BenchmarkEmptyString-4   	100000000	        15.3 ns/op
-	BenchmarkSingleInt-4     	30000000	        40.6 ns/op
-	PASS
-	coverage: 86.2%  of statements
-	ok  	binlog	5.324s
+```
+$ ./testall.sh 
+goos: linux
+goarch: amd64
+pkg: binlog
+BenchmarkEmptyString-4        	100000000	        14.2 ns/op
+BenchmarkSingleInt-4          	50000000	        26.1 ns/op
+BenchmarkSingleIntL2Cache-4   	50000000	        31.1 ns/op
+Benchmark2Ints-4              	30000000	        37.0 ns/op
+Benchmark3Ints-4              	30000000	        49.4 ns/op
+PASS
+coverage: 86.2%  of statements
+ok  	binlog	5.324s
+```
 	
 	
 The performance of the API is on par ("just" 2-3x slower) with C++ binary logs like https://github.com/PlatformLab/NanoLog
