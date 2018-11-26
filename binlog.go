@@ -561,7 +561,7 @@ func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*Handler, error)
 	return h, nil
 }
 
-func (b *Binlog) writeArgumentToOutput_0(writer writer, arg interface{}) error {
+func (b *Binlog) writeArgumentToOutput_Slow(writer writer, arg interface{}) error {
 	var err error
 	rv := reflect.ValueOf(arg)
 	var v uint64
@@ -578,7 +578,7 @@ func (b *Binlog) writeArgumentToOutput_0(writer writer, arg interface{}) error {
 	return err
 }
 
-func (b *Binlog) writeArgumentToOutput_1(writer writer, arg interface{}) error {
+func (b *Binlog) writeArgumentToOutput_Faster(writer writer, arg interface{}) error {
 	// unsafe pointer to the data depends on the data type
 	var err error
 	switch arg := arg.(type) {
