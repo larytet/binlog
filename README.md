@@ -79,7 +79,7 @@ ZAP log & some of it's faster friends.
 }
 ```
 
-The following popular formats are not supported: "%v", "%T", "%s"
+The following popular formats are not supported: "%v", "%T"
 
 
 

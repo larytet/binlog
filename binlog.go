@@ -239,22 +239,26 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 
 	hFmtString := h.FmtString
 	args := make([]interface{}, 0)
+	var value interface{}
+	var err error
 	// Read arguments from the binary stream
 	for _, hArg := range h.Args {
 		argType := hArg.ArgType
 		count := hArg.writer.getSize() // size of the integer I pushed into the binary stream
 		if isIntegral(argType) {
-			value, err := readIntegerFromReader(reader, count)
-			if err == nil {
-				args, err = appendArg(args, value, argType)
-				if err != nil {
-					return nil, fmt.Errorf("%v", err)
-				}
-			} else {
+			value, err = readIntegerFromReader(reader, count)
+		} else if hArg.ArgKind == reflect.String {
+			value, err = readStringFromReader(reader)
+		} else {
+			return nil, fmt.Errorf("Can not handle type %v", argType)
+		}
+		if err == nil {
+			args, err = appendArg(args, value, argType)
+			if err != nil {
 				return nil, fmt.Errorf("%v", err)
 			}
 		} else {
-			return nil, fmt.Errorf("Can not handle type %v", argType)
+			return nil, fmt.Errorf("%v", err)
 		}
 	}
 	logEntry.Args = args
@@ -415,28 +419,53 @@ func readIntegerFromReader(reader io.Reader, count int) (uint64, error) {
 	}
 }
 
-func appendArg(args []interface{}, value uint64, argType reflect.Type) ([]interface{}, error) {
-	switch argType.Kind() {
-	case reflect.Int:
+func readStringFromReader(reader io.Reader) (string, error) {
+	// Read 2 bytes of the size of the string
+	count := 2
+	slice := make([]byte, count)
+	n, err := reader.Read(slice)
+	if (n > 0) && (n != count) {
+		return "", fmt.Errorf("Read %d bytes instead of %d, err=%v", n, count, err)
+	} else if n == 0 {
+		return "", fmt.Errorf("EOF")
+	}
+	var value uint16
+	binary.Read(bytes.NewBuffer(slice[:]), binary.LittleEndian, &value)
+	count = int(value)
+	slice = make([]byte, count)
+	n, err = reader.Read(slice)
+	if (n > 0) && (n != count) {
+		return "", fmt.Errorf("Read %d bytes instead of %d, err=%v", n, count, err)
+	} else if n == 0 {
+		return "", fmt.Errorf("EOF")
+	}
+	return string(slice), nil
+}
+
+func appendArg(args []interface{}, arg interface{}, argType reflect.Type) ([]interface{}, error) {
+	switch value := arg.(type) {
+	case int:
 		return append(args, int(value)), nil
-	case reflect.Uint:
+	case uint:
 		return append(args, uint(value)), nil
-	case reflect.Int8:
+	case int8:
 		return append(args, int8(value)), nil
-	case reflect.Int16:
+	case int16:
 		return append(args, int16(value)), nil
-	case reflect.Int32:
+	case int32:
 		return append(args, int32(value)), nil
-	case reflect.Int64:
+	case int64:
 		return append(args, int64(value)), nil
-	case reflect.Uint8:
+	case uint8:
 		return append(args, uint8(value)), nil
-	case reflect.Uint16:
+	case uint16:
 		return append(args, uint16(value)), nil
-	case reflect.Uint32:
+	case uint32:
 		return append(args, uint32(value)), nil
-	case reflect.Uint64:
+	case uint64:
 		return append(args, uint64(value)), nil
+	case string:
+		return append(args, string(value)), nil
 	default:
 		return nil, fmt.Errorf("Can not handle type %v", argType.Kind())
 	}
@@ -677,6 +706,10 @@ func parseLogLine(gold string, args []interface{}) ([]*HandlerArg, error) {
 			writer := &writerByteArray{count: count}
 			hArg := &HandlerArg{writer: writer, ArgType: argType, FmtCode: r, ArgKind: argKind}
 			hArgs = append(hArgs, hArg)
+		case 's':
+			writer := &writerString{}
+			hArg := &HandlerArg{writer: writer, ArgType: argType, FmtCode: r, ArgKind: argKind}
+			hArgs = append(hArgs, hArg)
 		default:
 			return nil, fmt.Errorf("Can not handle '%c' in %s: unknown format code", r, gold)
 		}
@@ -754,4 +787,28 @@ func (w *writerByteArray) write(ioWriter io.Writer, data unsafe.Pointer) error {
 	// In the benchmarks this callback is an empty function
 	_, err := ioWriter.Write(dataToWrite)
 	return err
+}
+
+type writerString struct {
+}
+
+func (w *writerString) getSize() int {
+	return 0
+}
+
+// Write 16 bits length of the string followed by the string itself
+func (w *writerString) write(ioWriter io.Writer, data unsafe.Pointer) error {
+	// I am doing something which https://golang.org/pkg/unsafe/ explicitly forbids
+	var hdr *reflect.StringHeader = (*reflect.StringHeader)(data)
+	writer := &writerByteArray{2}
+	if err := writer.write(ioWriter, unsafe.Pointer(&(hdr.Len))); err != nil {
+		return err
+	}
+
+	writer = &writerByteArray{hdr.Len}
+	if err := writer.write(ioWriter, unsafe.Pointer(hdr.Data)); err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -344,6 +344,29 @@ func TestPrintIntegers(t *testing.T) {
 	}
 }
 
+func TestPrintString(t *testing.T) {
+	var buf bytes.Buffer
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	binlog := Init(&buf, uint(constDataBase), uint(constDataSize))
+
+	fmtString := "Hello %s"
+	arg := "world"
+	err := binlog.Log(fmtString, arg)
+	expected := fmt.Sprintf(fmtString, arg)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	logEntry, err := binlog.DecodeNext(&buf)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	actual := fmt.Sprintf(logEntry.FmtString, logEntry.Args...)
+	if expected != actual {
+		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
+	}
+}
+
 func TestPrint2Ints(t *testing.T) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
