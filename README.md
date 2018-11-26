@@ -35,6 +35,10 @@ Example:
 }
 ```
 
+# Install
+
+You need something like '''../../bin/dep ensure --update''' to install missing packages
+
 # Limitations
 
 I did not test for Windows. 
