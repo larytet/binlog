@@ -164,16 +164,6 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 	return nil
 }
 
-type FieldType uint8
-
-type Field struct {
-	Key       string
-	Type      FieldType
-	Integer   int64
-	String    string
-	Interface interface{}
-}
-
 // This is straight from the https://github.com/uber-go/zap playbook
 func (b *Binlog) LogStructured(msg string, fields ...Field) error {
 	return fmt.Errorf("Not supported")
