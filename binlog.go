@@ -741,7 +741,6 @@ func (w *writerByteArray) write(ioWriter io.Writer, data unsafe.Pointer) error {
 	hdr.Cap = w.count
 
 	dataToWrite := *((*[]byte)(unsafe.Pointer(&hdr)))
-	//log.Printf("Writing %v, count=%d", dataToWrite, w.count)
 	// In the benchmarks this callback is an empty function
 	_, err := ioWriter.Write(dataToWrite)
 	return err
