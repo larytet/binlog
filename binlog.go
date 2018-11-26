@@ -6,9 +6,9 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"fmt"
-	"github.com/jandre/procfs"
-	"github.com/jandre/procfs/maps"
 	"github.com/larytet-go/moduledata"
+	"github.com/larytet-go/procfs"
+	"github.com/larytet-go/procfs/maps"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -709,6 +709,9 @@ func GetSelfTextAddressSize() (constDataBase uint, constDataSize uint) {
 
 }
 
+// Package "procfs"  lacks any printing facilities and my pull requests
+// are getting ignored.
+// TODO move the API to the forked procfs
 func SprintfMaps(maps []*maps.Maps) string {
 	s := ""
 	for _, m := range maps {
