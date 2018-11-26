@@ -25,24 +25,10 @@
 #   unused-packages = true
 
 
+required = ["github.com/larytet-go/procfs", "github.com/larytet-go/sprintf", "github.com/larytet-go/moduledata", ]
 
 [prune]
   go-tests = true
   unused-packages = true
 
 
-[[constraint]]
-  branch = "master"
-  name = "github.com/larytet/sprintf"
-
-[[constraint]]
-  branch = "master"
-  name = "github.com/larytet-go/moduledata"
-
-[[constraint]]
-  branch = "master"
-  name = "github.com/larytet-go/sprintf"
-
-[[constraint]]
-  branch = "master"
-  name = "github.com/larytet-go/procfs"

@@ -11,7 +11,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:f00c62db326b95a76bf10d6d04e8f94f9c45aa00d8557562f5ee4bb214d6bc7a"
+  digest = "1:7e33ce5d50630aec8844562d20ab4820074c9ef15edb1ad66c41796f0a142447"
   name = "github.com/larytet-go/procfs"
   packages = [
     ".",
@@ -23,7 +23,7 @@
     "util",
   ]
   pruneopts = "UT"
-  revision = "81668c9df2e3824f1b3ea78ed9f744b4b7696dc1"
+  revision = "7dac1920a03d298d86607998d68a4d0e93ed3103"
 
 [[projects]]
   branch = "master"
