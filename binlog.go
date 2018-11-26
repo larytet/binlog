@@ -667,8 +667,9 @@ func getInterfaceData(arg interface{}) unsafe.Pointer {
 // Before you jump to conclusions see
 // https://groups.google.com/forum/#!topic/golang-nuts/Og8s9Y-Kif4
 func (b *Binlog) writeArgumentToOutput(writer writer, arg interface{}) error {
-	// unsafe pointer to the data depends on the data type
 	var err error
+	// writer.write() expects an unsafe pointer
+	// writer will copy the required number of bytes to the output binary stream
 	err = writer.write(b.ioWriter, getInterfaceData(arg))
 	return err
 }
