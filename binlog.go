@@ -747,6 +747,8 @@ func getTextAddressSize(maps []*maps.Maps) (constDataBase uint, constDataSize ui
 	return 0, 0
 }
 
+// Return base address and size of the text segment
+// There are two ways to do this - procfs or moduledata
 func GetSelfTextAddressSize() (constDataBase uint, constDataSize uint) {
 	selfPid := os.Getpid()
 	process, err := procfs.NewProcess(selfPid, true)
