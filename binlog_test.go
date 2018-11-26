@@ -453,6 +453,22 @@ func BenchmarkSingleInt(b *testing.B) {
 	b.StopTimer()
 }
 
+func BenchmarkSingleIntRogerPeppe(b *testing.B) {
+	var buf DummyIoWriter
+	buf.Grow(b.N * (8 + 4 + 4 + 8))
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	fmtString := "Hello %d"
+	binlog := Init(&buf, constDataBase, constDataSize)
+	// Cache the first entry
+	binlog.Log(fmtString, 10)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		binlog.Log(fmtString, i)
+	}
+	b.StopTimer()
+}
+
 func BenchmarkSingleIntL2Cache(b *testing.B) {
 	var buf DummyIoWriter
 	buf.Grow(b.N * (8 + 4 + 4 + 8))
