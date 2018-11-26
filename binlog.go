@@ -244,8 +244,8 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 	// Read arguments from the binary stream
 	for _, hArg := range h.Args {
 		argType := hArg.ArgType
-		count := hArg.writer.getSize() // size of the integer I pushed into the binary stream
 		if isIntegral(argType) {
+			count := hArg.writer.getSize() // size of the integer I pushed into the binary stream
 			value, err = readIntegerFromReader(reader, count)
 		} else if hArg.ArgKind == reflect.String {
 			value, err = readStringFromReader(reader)
@@ -766,7 +766,11 @@ func GetSelfTextAddressSize() (constDataBase uint, constDataSize uint) {
 var defaultHandler Handler
 
 type writer interface {
+	// I need a sufficiently abstract API which does not involve
+	// interface{} and still can accept pointers to arbitrary objects
+	// In C I would use (void*)
 	write(io.Writer, unsafe.Pointer) error
+
 	getSize() int
 }
 
