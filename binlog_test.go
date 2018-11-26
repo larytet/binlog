@@ -344,46 +344,6 @@ func TestPrintIntegers(t *testing.T) {
 	}
 }
 
-func TestL2Cache(t *testing.T) {
-	var buf bytes.Buffer
-	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := Init(&buf, uint(constDataBase), uint(constDataSize))
-	rand.Seed(42)
-
-	value := rand.Uint64()
-	// dynamic allocation here
-	fmtString := fmt.Sprintf("%s %%d", "Hello")
-	_, filename, line, _ := runtime.Caller(0)
-	err := binlog.Log(fmtString, value)
-	expected := fmt.Sprintf(fmtString, value)
-	if err != nil {
-		t.Fatalf("%v", err)
-	}
-
-	logEntry, err := binlog.DecodeNext(&buf)
-	if err != nil {
-		t.Fatalf("%v", err)
-	}
-
-	actual := fmt.Sprintf(logEntry.FmtString, logEntry.Args...)
-	if expected != actual {
-		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
-	}
-
-	if ADD_SOURCE_LINE {
-		if logEntry.Filename != filename {
-			t.Fatalf("Filename is '%s', instead of '%s'", logEntry.Filename, filename)
-		}
-		if logEntry.LineNumber != (line + 1) {
-			t.Fatalf("Linenumber is '%d', instead of '%d'", logEntry.LineNumber, line+1)
-		}
-	}
-	statistics := binlog.GetStatistics()
-	if statistics.L2CacheUsed != 1 {
-		t.Fatalf("Cache L2 used %d times instead of 1 time", statistics.L2CacheUsed)
-	}
-}
-
 func TestPrint2Ints(t *testing.T) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
@@ -551,6 +511,46 @@ func Benchmark3IntsLogIndex(b *testing.B) {
 	}
 	b.StopTimer()
 	SEND_LOG_INDEX = false
+}
+
+func TestL2Cache(t *testing.T) {
+	var buf bytes.Buffer
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	binlog := Init(&buf, uint(constDataBase), uint(constDataSize))
+	rand.Seed(42)
+
+	value := rand.Uint64()
+	// dynamic allocation here
+	fmtString := fmt.Sprintf("%s %%d", "Hello")
+	_, filename, line, _ := runtime.Caller(0)
+	err := binlog.Log(fmtString, value)
+	expected := fmt.Sprintf(fmtString, value)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	logEntry, err := binlog.DecodeNext(&buf)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	actual := fmt.Sprintf(logEntry.FmtString, logEntry.Args...)
+	if expected != actual {
+		t.Fatalf("Print failed expected '%s', actual '%s'", expected, actual)
+	}
+
+	if ADD_SOURCE_LINE {
+		if logEntry.Filename != filename {
+			t.Fatalf("Filename is '%s', instead of '%s'", logEntry.Filename, filename)
+		}
+		if logEntry.LineNumber != (line + 1) {
+			t.Fatalf("Linenumber is '%d', instead of '%d'", logEntry.LineNumber, line+1)
+		}
+	}
+	statistics := binlog.GetStatistics()
+	if statistics.L2CacheUsed != 1 {
+		t.Fatalf("Cache L2 used %d times instead of 1 time", statistics.L2CacheUsed)
+	}
 }
 
 func BenchmarkFmtFprintf3Ints(b *testing.B) {

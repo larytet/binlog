@@ -13,7 +13,6 @@ goarch: amd64
 pkg: binlog
 BenchmarkEmptyString-4        	100000000	        14.2 ns/op
 BenchmarkSingleInt-4          	50000000	        26.1 ns/op
-BenchmarkSingleIntL2Cache-4   	50000000	        31.1 ns/op
 Benchmark2Ints-4              	30000000	        37.0 ns/op
 Benchmark3Ints-4              	30000000	        49.4 ns/op
 PASS
