@@ -25,7 +25,7 @@
 #   unused-packages = true
 
 
-required = ["github.com/larytet-go/procfs", "github.com/larytet-go/sprintf", "github.com/larytet-go/moduledata", ]
+required = ["github.com/larytet-go/procfs", "github.com/larytet-go/sprintf", "github.com/larytet-go/moduledata"]
 
 [prune]
   go-tests = true

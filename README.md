@@ -37,7 +37,8 @@ Example:
 
 # Install
 
-You need something like '''../../bin/dep ensure --update''' to install missing packages
+You need something like ```../../bin/dep ensure --update``` or something like 
+```go get "github.com/larytet-go/procfs" "github.com/larytet-go/sprintf"  "github.com/larytet-go/moduledata"``` to install missing packages
 
 # Limitations
 
