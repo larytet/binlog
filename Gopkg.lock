@@ -2,17 +2,6 @@
 
 
 [[projects]]
-  digest = "1:ea0d6428dcd4ba3d4033cd1b9e9557e7a19f093bb53978411d0b3621e6632d8c"
-  name = "github.com/jandre/procfs"
-  packages = [
-    "status",
-    "util",
-  ]
-  pruneopts = "UT"
-  revision = "4b8fe3f206904d8e4e834c430adcdcf42349682e"
-  version = "0.1.0"
-
-[[projects]]
   branch = "master"
   digest = "1:96c168c2d18c436b54577d9dffd8248900ba715ab48436e865c7d98b51450dd1"
   name = "github.com/larytet-go/moduledata"
@@ -22,7 +11,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:0a81110807866c510f1a4ce1cc1a8a5f747de438686e552a0885a5227d3f2442"
+  digest = "1:f00c62db326b95a76bf10d6d04e8f94f9c45aa00d8557562f5ee4bb214d6bc7a"
   name = "github.com/larytet-go/procfs"
   packages = [
     ".",
@@ -30,10 +19,11 @@
     "maps",
     "stat",
     "statm",
+    "status",
     "util",
   ]
   pruneopts = "UT"
-  revision = "c90f8fe23a18f70be2d15af0db1f35788d705cb2"
+  revision = "81668c9df2e3824f1b3ea78ed9f744b4b7696dc1"
 
 [[projects]]
   branch = "master"
