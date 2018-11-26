@@ -501,7 +501,7 @@ func (b *Binlog) createHandler(fmtStr string, args []interface{}) (*Handler, err
 
 // My hashtable is trivial: address of the string is an index in the array of handlers
 // I assume that all strings are allocated in the same text section of the executable
-// If this is not the case I try to use a map (slower)
+// If this is not the case I try to use a map (8x slower)
 // The end result of this function is a new handler for the fmtStr in L1 or L2 cache
 func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*Handler, error) {
 	var h *Handler = &defaultHandler
@@ -584,7 +584,8 @@ func (b *Binlog) writeArgumentToOutput_0(writer writer, arg interface{}) error {
 // Type casts from interface{} to integer consume 40% of the overall
 // time. Can I do better? What is interface{} in Golang?
 // Switching to args *[]interface makes the performance 2x worse
-// See also https://groups.google.com/forum/#!topic/golang-nuts/Og8s9Y-Kif4
+// Before you jump to conlusions see
+// https://groups.google.com/forum/#!topic/golang-nuts/Og8s9Y-Kif4
 func (b *Binlog) writeArgumentToOutput(writer writer, arg interface{}) error {
 	// unsafe pointer to the data depends on the data type
 	var err error
