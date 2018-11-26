@@ -453,6 +453,9 @@ func BenchmarkSingleInt(b *testing.B) {
 	b.StopTimer()
 }
 
+// Force Go compiler to allocate an object every time
+// binlog.Log() is called. Performance suffers.
+// Go allocates integers from the heap?
 func BenchmarkSingleIntRogerPeppe(b *testing.B) {
 	var buf DummyIoWriter
 	buf.Grow(b.N * (8 + 4 + 4 + 8))

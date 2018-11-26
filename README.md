@@ -4,7 +4,8 @@ This is likely the fastest possible implementation of a log in Golang or close t
 This logger will allow you to keep logging in many cases when the peformance of the official log package is too low.
 The binary log is small and fast. You pay only for variadic data you send. 
 Output of a string without variadic arguments (logger adds hash of the string to the binary stream) will set you back by 15ns.
-Every additional argument of the integral type costs ~10ns. binlog.Log() is 3x faster than fmt.Fprintf() API
+Every additional argument of the integral type costs ~10ns if this is a constant. 
+binlog.Log() is 3x faster than fmt.Fprintf() API
 
 ```
 $ ./testall.sh 
