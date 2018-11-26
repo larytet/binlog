@@ -732,6 +732,7 @@ func (w *writerByteArray) getSize() int {
 	return w.count
 }
 
+// Copy w.count bytes from the unsafe pointer to the byte stream
 func (w *writerByteArray) write(ioWriter io.Writer, data unsafe.Pointer) error {
 	// I am doing something which https://golang.org/pkg/unsafe/ explicitly forbids
 	var hdr reflect.SliceHeader
