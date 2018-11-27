@@ -412,6 +412,33 @@ func (w *DummyIoWriter) Write(data []byte) (int, error) {
 func (w *DummyIoWriter) Grow(size int) {
 }
 
+func BenchmarkTypeCast0(b *testing.B) {
+	count := 0
+	for i := 0; i < b.N; i++ {
+		delta := i
+		count = count + delta
+	}
+}
+
+func BenchmarkTypeCast1(b *testing.B) {
+	var delta interface{}
+	delta = b.N
+	count := 0
+	for i := 0; i < b.N; i++ {
+		count = count + delta.(int)
+	}
+}
+
+func BenchmarkTypeCast2(b *testing.B) {
+	var delta interface{}
+	delta = b.N
+	count := 0
+	for i := 0; i < b.N; i++ {
+		data := unsafe.Pointer((((*iface)(unsafe.Pointer(&delta))).data))
+		count = count + *((*int)(data))
+	}
+}
+
 func BenchmarkEmptyString(b *testing.B) {
 	var buf DummyIoWriter
 	buf.Grow(b.N * (4 + 4 + 8))
