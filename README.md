@@ -27,7 +27,7 @@ The original idea is https://github.com/ScottMansfield/nanolog/issues/4
 
 **Warning!** This code pushes Go quite to it's limit. There are unsafe pointers, ATS walk, StringHeader and
 other explicitly-forbidden/anti-pattern/not-best-practice/makes-me-sick things galore for the taste of many.
-If you want trade performance for compliance try https://github.com/ScottMansfield/nanolog 
+If you prefer to trade performance for compliance try https://github.com/ScottMansfield/nanolog 
 
 Example:
 
