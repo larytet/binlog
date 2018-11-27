@@ -608,16 +608,39 @@ func BenchmarkFmtFprintf3Ints(b *testing.B) {
 	b.StopTimer()
 }
 
-func BenchmarkFmtSprintf3Ints(b *testing.B) {
-	var buf DummyIoWriter
-	buf.Grow(b.N * (8 + 4 + 4 + 8))
-	fmtString := "Hello %d %d %d"
-	args := []interface{}{10, 20, 30}
-	b.ResetTimer()
+type FieldType uint8
 
+type Field struct {
+	Key       string
+	Type      FieldType
+	Integer   int64
+	String    string
+	Interface interface{}
+}
+
+const (
+	// UnknownType is the default field type. Attempting to add it to an encoder will panic.
+	UnknownType FieldType = iota
+	// Int64Type indicates that the field carries an int64.
+	Uint64Type
+)
+
+func Uint64(key string, val uint64) Field {
+	return Field{Key: key, Type: Uint64Type, Integer: int64(val)}
+}
+
+func handleFields(s string, fields ...Field) {
+
+}
+
+func BenchmarkZapApi(b *testing.B) {
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		s := fmt.Sprintf(fmtString, args...)
-		buf.Write([]byte(s))
+		handleFields("Hello ",
+			Uint64("world", 0),
+			Uint64("world", 1),
+			Uint64("world", 2),
+		)
 	}
 	b.StopTimer()
 }
