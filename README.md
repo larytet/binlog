@@ -109,3 +109,7 @@ using only the source files. Should I assume that calls to the log look like xx.
 
 Add suport for "float", "char"
 
+Add a "writer" based on FIFO. The idea is to "allocate" the necessary number of bytes from the FIFO starting from the tail, mark the start of the block as "allocated", return a pointer to the 
+allocated block. The application copies the data to the block, marks the block as "initialized". The "consumer" (a thread which dumps the logs) reverses the process.
+When allocating blocks the FIFO always allocates continuous memory areas. If there is not enough place between tail and end of the FIFO the allocator marks 
+the unused area as skipped and attempts to allocate a block from offset zero.
