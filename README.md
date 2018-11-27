@@ -107,6 +107,5 @@ Golang related stuff
 Add hash of the strings to the binary stream. Parse the Go sources, collect and hash all strings in calls to the binlog. Decode binary streams
 using only the source files. Should I assume that calls to the log look like xx.Log("...", arg1, ...)?
 
-Add suport for "string", "float"
+Add suport for "float", "char"
 
-Optimize "writeArgumentToOutput"
