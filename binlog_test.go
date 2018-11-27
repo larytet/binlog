@@ -614,7 +614,7 @@ func logFrintf(ioWriter io.Writer, level int, fmtStr string, args ...interface{}
 	copy(args[2:], args[0:])
 	args[0] = level
 	args[1] = time.Now()
-	fmt.Fprintf(ioWriter, "%v %d"+fmtStr, args...)
+	fmt.Fprintf(ioWriter, "%d %v "+fmtStr, args...)
 }
 
 func BenchmarkLogFprintf(b *testing.B) {
