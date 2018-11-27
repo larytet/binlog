@@ -650,7 +650,7 @@ func (b *Binlog) writeArgumentToOutput_Faster(writer writer, arg interface{}) er
 // According to https://golang.org/src/runtime/runtime2.go interface
 // is a structure with two fields - type and reference to the data
 type iface struct {
-	tab  *unsafe.Pointer // *itab
+	tab  unsafe.Pointer // *itab
 	data unsafe.Pointer
 }
 
