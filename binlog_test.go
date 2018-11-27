@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"github.com/larytet-go/moduledata"
 	"github.com/larytet-go/sprintf"
+	"io"
 	"math/rand"
 	"os"
 	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 	"unsafe"
 )
 
@@ -606,6 +608,20 @@ func BenchmarkFmtFprintf3Ints(b *testing.B) {
 		fmt.Fprintf(&buf, fmtString, args...)
 	}
 	b.StopTimer()
+}
+
+func logFrintf(ioWriter io.Writer, level int, fmtStr string, args ...interface{}) {
+	copy(args[2:], args[0:])
+	args[0] = level
+	args[1] = time.Now()
+	fmt.Fprintf(ioWriter, "%v %d"+fmtStr, args...)
+}
+
+func BenchmarkLogFprintf(b *testing.B) {
+	var buf DummyIoWriter
+	for i := 0; i < b.N; i++ {
+		logFrintf(&buf, 0, "%d %d %d %d", 0, 1, 2, 3)
+	}
 }
 
 type FieldType uint8
