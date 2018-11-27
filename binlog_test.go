@@ -412,109 +412,6 @@ func (w *DummyIoWriter) Write(data []byte) (int, error) {
 func (w *DummyIoWriter) Grow(size int) {
 }
 
-type T int
-
-func (t T) Value() int {
-	return int(t)
-}
-
-type I interface {
-	Value() int
-}
-
-//go:noinline
-func Assert(c *int, d interface{}) {
-	*c += d.(int)
-}
-
-func BenchmarkAssertion(b *testing.B) {
-	count := 0
-	d := (interface{})(1)
-	for i := 0; i < b.N; i++ {
-		Assert(&count, d)
-	}
-}
-
-//go:noinline
-func AssertOK(c *int, d interface{}) {
-	δ, _ := d.(int)
-	*c += δ
-}
-
-func BenchmarkAssertionOK(b *testing.B) {
-	count := 0
-	d := (interface{})(1)
-	for i := 0; i < b.N; i++ {
-		AssertOK(&count, d)
-	}
-}
-
-//go:noinline
-func Bare(c *int, d int) {
-	*c += d
-}
-
-func BenchmarkBare(b *testing.B) {
-	count := 0
-	d := 1
-	for i := 0; i < b.N; i++ {
-		Bare(&count, d)
-	}
-}
-
-//go:noinline
-func Iface(c *int, d I) {
-	*c += d.Value()
-}
-
-func BenchmarkIface(b *testing.B) {
-	count := 0
-	d := T(1)
-	for i := 0; i < b.N; i++ {
-		Iface(&count, d)
-	}
-}
-
-//go:noinline
-func Reflect(c *int, d interface{}) {
-	*c += int(reflect.ValueOf(d).Int())
-}
-
-func BenchmarkReflect(b *testing.B) {
-	count := 0
-	d := (interface{})(1)
-	for i := 0; i < b.N; i++ {
-		Reflect(&count, d)
-	}
-}
-
-func BenchmarkTypeCast0(b *testing.B) {
-	count := 0
-	for i := 0; i < b.N; i++ {
-		delta := i
-		count = count + delta
-	}
-}
-
-func BenchmarkTypeCast1(b *testing.B) {
-	var delta interface{}
-	delta = b.N
-	count := 0
-	for i := 0; i < b.N; i++ {
-		count = count + delta.(int)
-	}
-}
-
-func BenchmarkTypeCast2(b *testing.B) {
-	var delta interface{}
-	delta = b.N
-	count := 0
-	for i := 0; i < b.N; i++ {
-		data := unsafe.Pointer((((*iface)(unsafe.Pointer(&delta))).data))
-		count = count + *((*int)(data))
-	}
-}
-
 func BenchmarkEmptyString(b *testing.B) {
 	var buf DummyIoWriter
 	buf.Grow(b.N * (4 + 4 + 8))
@@ -763,4 +660,107 @@ func BenchmarkZapApi(b *testing.B) {
 		)
 	}
 	b.StopTimer()
+}
+
+type T int
+
+func (t T) Value() int {
+	return int(t)
+}
+
+type I interface {
+	Value() int
+}
+
+//go:noinline
+func Assert(c *int, d interface{}) {
+	*c += d.(int)
+}
+
+func BenchmarkAssertion(b *testing.B) {
+	count := 0
+	d := (interface{})(1)
+	for i := 0; i < b.N; i++ {
+		Assert(&count, d)
+	}
+}
+
+//go:noinline
+func AssertOK(c *int, d interface{}) {
+	δ, _ := d.(int)
+	*c += δ
+}
+
+func BenchmarkAssertionOK(b *testing.B) {
+	count := 0
+	d := (interface{})(1)
+	for i := 0; i < b.N; i++ {
+		AssertOK(&count, d)
+	}
+}
+
+//go:noinline
+func Bare(c *int, d int) {
+	*c += d
+}
+
+func BenchmarkBare(b *testing.B) {
+	count := 0
+	d := 1
+	for i := 0; i < b.N; i++ {
+		Bare(&count, d)
+	}
+}
+
+//go:noinline
+func Iface(c *int, d I) {
+	*c += d.Value()
+}
+
+func BenchmarkIface(b *testing.B) {
+	count := 0
+	d := T(1)
+	for i := 0; i < b.N; i++ {
+		Iface(&count, d)
+	}
+}
+
+//go:noinline
+func Reflect(c *int, d interface{}) {
+	*c += int(reflect.ValueOf(d).Int())
+}
+
+func BenchmarkReflect(b *testing.B) {
+	count := 0
+	d := (interface{})(1)
+	for i := 0; i < b.N; i++ {
+		Reflect(&count, d)
+	}
+}
+
+func BenchmarkTypeCast0(b *testing.B) {
+	count := 0
+	for i := 0; i < b.N; i++ {
+		delta := i
+		count = count + delta
+	}
+}
+
+func BenchmarkTypeCast1(b *testing.B) {
+	var delta interface{}
+	delta = b.N
+	count := 0
+	for i := 0; i < b.N; i++ {
+		count = count + delta.(int)
+	}
+}
+
+func BenchmarkTypeCast2(b *testing.B) {
+	var delta interface{}
+	delta = b.N
+	count := 0
+	for i := 0; i < b.N; i++ {
+		data := unsafe.Pointer((((*iface)(unsafe.Pointer(&delta))).data))
+		count = count + *((*int)(data))
+	}
 }
