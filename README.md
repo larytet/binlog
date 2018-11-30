@@ -53,8 +53,8 @@ func main() {
 
 # How it works
 
-When an application calls binlog.Log() the Log() checks the cache using the offset of the format string in the executable .text 
-section as an index. You guessed it right - this step is insanely fast.
+When an application calls binlog.Log() the Log() checks the cache using the offset of the format string in the .text 
+section of the executable as an index. You guessed it right - this step is insanely fast.
  
 If there is a cache miss the Log() collects all required data, adds the format string to the cache ("level 1 cache"). 
 If there is a cache hit the Log() outputs hash of the format string and all variadic parameters using the specified io.Writer
