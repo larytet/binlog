@@ -54,11 +54,15 @@ func main() {
 # How it works
 
 When an application calls binlog.Log() the Log() checks the cache using the offset of the format string in the .text 
-section of the executable as an index. You guessed it right - this step is insanely fast. 
+section of the executable as an index. You guessed it right - this step is insanely fast.  
  
 If there is a cache miss the Log() collects all required data, adds the format string to the cache ("level 1 cache"). 
-If there is a cache hit the Log() outputs hash of the format string and all variadic parameters using the specified io.Writer
-If the string is not from the .text section (allocated from a heap, for example) the Log() stores the string in the map ("level 2 cache"). 
+If there is a cache hit the Log() outputs hash of the format string and all variadic parameters to the specified io.Writer
+If the string is not from the .text section (allocated from a heap, for example) the Log() stores the string in the map ("level 2 cache").
+
+The cache (L1 and L2) contains the information required for dedocding and formatting of the binary data. Things like size 
+of the argument, format "verb", number of arguments, hash of the format string, the format string are all in the cache. 
+
 
 # Install
 
@@ -117,8 +121,8 @@ Golang related stuff
 
 # Todo
 
-Add hash of the strings to the binary stream. Parse the Go sources, collect and hash all strings in calls to the binlog. Decode binary streams
-using only the source files. Should I assume that calls to the log look like xx.Log("...", arg1, ...)?
+Decode binary streams using only the source files and allow offline decode of the binary streams. Parse the Go sources, 
+collect and hash all strings in calls to the binlog. Should I assume that calls to the log look like xx.Log("...", arg1, ...)?
 
 Add suport for "float", "char"
 
