@@ -101,6 +101,9 @@ ZAP log & some of it's faster friends.
 The following popular formats are not supported: "%v", "%T", "%c", "%p"
 
 
+Offline decoding using only source files is a work in progress. 
+
+
 
 # Links
 
