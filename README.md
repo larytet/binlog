@@ -120,6 +120,7 @@ Golang related stuff
 * https://stackoverflow.com/questions/46115312/use-ast-to-get-all-function-calls-in-a-function
 * https://github.com/uber-go/zap/issues/653
 * https://groups.google.com/forum/#!topic/golang-nuts/Og8s9Y-Kif4
+* https://github.com/elazarl/gosloppy - probably contains more example of Go parsing
 
 
 # Todo
