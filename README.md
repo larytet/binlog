@@ -113,6 +113,7 @@ More benchmark for different logging frameworks (Spoiler: NOP loggers which do n
 * https://stackoverflow.com/questions/10571182/go-disable-a-log-logger
 * https://blapid.github.io/cpp/2017/10/31/llcpp-a-quest-for-faster-logging-part-2.html
 * https://github.com/gabime/spdlog/issues/942
+* https://github.com/zuhd-org/easyloggingpp
 
 Golang related stuff 
 
