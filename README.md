@@ -114,6 +114,9 @@ More benchmark for different logging frameworks (Spoiler: NOP loggers which do n
 * https://blapid.github.io/cpp/2017/10/31/llcpp-a-quest-for-faster-logging-part-2.html
 * https://github.com/gabime/spdlog/issues/942
 * https://github.com/zuhd-org/easyloggingpp
+* https://godoc.org/github.com/alexcesaro/log/stdlog
+* https://github.com/hashicorp/logutils
+* https://github.com/romana/rlog
 
 Golang related stuff 
 
