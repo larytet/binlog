@@ -131,7 +131,7 @@ Golang related stuff
 
 # Todo
 
-Decode binary streams using only the source files and allow offline decode of the binary streams. Parse the Go sources, 
+Decode binary streams using only the source files or the executable. Allow offline decode of the binary streams. Parse the Go sources or executable 
 collect and hash all strings in calls to the binlog. Should I assume that calls to the log look like xx.Log("...", arg1, ...)?
 
 Add suport for "float", "char"
