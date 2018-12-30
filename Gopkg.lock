@@ -33,8 +33,6 @@
   pruneopts = "UT"
   revision = "c9a4d9310a7641bcd9ce53a84cd266d35d24c147"
 
-
-
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
