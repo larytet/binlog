@@ -23,7 +23,7 @@ import (
 	"unsafe"
 )
 
-import "C"
+//import "C"
 
 // Add unique system level running counter of logs
 var SEND_LOG_INDEX bool = false
