@@ -27,6 +27,17 @@ func getStringSize(s string) uintptr {
 	return align(uintptr(len(s)))
 }
 
+func TestGetIndexTable(t *testing.T) {
+	filename, err := os.Executable()
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	_, _, err = GetIndexTable(filename)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+}
+
 func TestStringDedup(t *testing.T) {
 	if ADD_SOURCE_LINE {
 		s0 := "Hello, world"
@@ -95,17 +106,6 @@ func TestGetModules(t *testing.T) {
 	}
 	if !contains {
 		t.Logf("Module %s not found in %s", modulename, filename)
-	}
-}
-
-func TestGetIndexTable(t *testing.T) {
-	filename, err := os.Executable()
-	if err != nil {
-		t.Fatalf("%v", err)
-	}
-	_, _, err = GetIndexTable(filename)
-	if err != nil {
-		t.Fatalf("%v", err)
 	}
 }
 

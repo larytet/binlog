@@ -274,11 +274,11 @@ func (b *Binlog) GetIndexTable() (map[uint32]*Handler, map[uint16]string) {
 }
 
 type astVisitor struct {
-	fmtStrings []string
+	fmtStrings *[]string
 }
 
-func (v *astVisitor) Init() {
-	v.fmtStrings = make([]string, 0)
+func (v *astVisitor) Init(fmtStrings []string) {
+	v.fmtStrings = &fmtStrings
 }
 
 func (v astVisitor) Visit(n ast.Node) ast.Visitor {
@@ -311,16 +311,17 @@ func (v astVisitor) Visit(n ast.Node) ast.Visitor {
 	switch arg0 := (args[0]).(type) {
 	case *ast.BasicLit:
 		fmtString = arg0.Value
-		v.fmtStrings = append(v.fmtStrings, fmtString)
-		//log.Printf("%v", v.fmtStrings)
+		*(v.fmtStrings) = append(*(v.fmtStrings), fmtString)
+		log.Printf("%v", *(v.fmtStrings))
 	}
 	return v
 }
 
 func collectBinlogArguments(astFile *ast.File) (*astVisitor, error) {
+	fmtStrings := make([]string, 0)
 	//decls := astFile.Decls
 	var v astVisitor
-	(&v).Init()
+	(&v).Init(fmtStrings)
 	ast.Walk(v, astFile)
 	return &v, nil
 }
@@ -357,7 +358,7 @@ func GetIndexTable(filename string) (map[uint32]*Handler, map[uint16]string, err
 			continue
 		}
 		astVisitor, err := collectBinlogArguments(astFile)
-		foundFmtStrings := len(astVisitor.fmtStrings)
+		foundFmtStrings := len(*(astVisitor.fmtStrings))
 		if foundFmtStrings > 0 {
 			log.Printf("Found %d matches", foundFmtStrings)
 		}
