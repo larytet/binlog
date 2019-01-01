@@ -2,6 +2,7 @@ package binlog
 
 import (
 	"bytes"
+	"debug/elf"
 	"encoding/binary"
 	"fmt"
 	"github.com/larytet-go/moduledata"
@@ -54,6 +55,30 @@ func executableContains(filename string, moduleName string) (bool, error) {
 		return false, err
 	}
 
+}
+
+func TestGetStrings(t *testing.T) {
+	filename, err := os.Executable()
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	bin, err := os.OpenFile(filename, os.O_RDONLY, 0)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	f, err := elf.NewFile(bin)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	sectionRodataName := ".rodata"
+	sectionRodata := f.Section(sectionRodataName)
+	if sectionRodata == nil {
+		t.Fatalf("No %s section in the ELF %s", sectionRodataName, filename)
+	}
+	_, err = sectionRodata.Data()
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
 }
 
 // Test if I can fetch the module names from the ELF file in this
