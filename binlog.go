@@ -45,8 +45,8 @@ var binlogIndex uint64
 type HandlerArg struct {
 	writer  writer
 	FmtVerb rune         // for example, x (from %x)
-	ArgType reflect.Type // type of the argument, for example int32
-	ArgKind reflect.Kind // type of the argument, for example int32
+	ArgType reflect.Type // type of the argument
+	ArgKind reflect.Kind // "kind" of the argument, for example int32
 }
 
 type Handler struct {
@@ -273,12 +273,23 @@ func (b *Binlog) GetIndexTable() (map[uint32]*Handler, map[uint16]string) {
 	return b.handlersLookupByHash, b.Filenames
 }
 
-type astVisitor struct {
-	fmtStrings *[]string
+type binlogCallArg struct {
+	argType reflect.Type // type of the argument
+	argKind reflect.Kind // "kind" of the argument, for example int32
 }
 
-func (v *astVisitor) Init(fmtStrings []string) {
-	v.fmtStrings = &fmtStrings
+type binlogCall struct {
+	pos       token.Pos // position (offset) in the source file
+	fmtString string    // the format string, 1st argument of the binlog.Log()
+	args      []binlogCallArg
+}
+
+type astVisitor struct {
+	callsCollection *[]binlogCall
+}
+
+func (v *astVisitor) Init(callsCollection []binlogCall) {
+	v.callsCollection = &callsCollection
 }
 
 func (v astVisitor) Visit(astNode ast.Node) ast.Visitor {
@@ -288,7 +299,6 @@ func (v astVisitor) Visit(astNode ast.Node) ast.Visitor {
 	var packageName string
 	var functionName string
 	var args []ast.Expr
-	var fmtString string
 	switch astCallExpr := astNode.(type) {
 	case *ast.CallExpr:
 		switch astSelectExpr := astCallExpr.Fun.(type) {
@@ -310,18 +320,18 @@ func (v astVisitor) Visit(astNode ast.Node) ast.Visitor {
 	}
 	switch arg0 := (args[0]).(type) {
 	case *ast.BasicLit:
-		fmtString = arg0.Value
-		*(v.fmtStrings) = append(*(v.fmtStrings), fmtString)
-		log.Printf("%v", *(v.fmtStrings))
+		binlogCall := binlogCall{pos: astNode.Pos(), fmtString: arg0.Value}
+		*(v.callsCollection) = append(*(v.callsCollection), binlogCall)
+		log.Printf("%v", binlogCall)
 	}
 	return v
 }
 
 func collectBinlogArguments(astFile *ast.File) (*astVisitor, error) {
-	fmtStrings := make([]string, 0)
+	callsCollection := make([]binlogCall, 0)
 	//decls := astFile.Decls
 	var v astVisitor
-	(&v).Init(fmtStrings)
+	(&v).Init(callsCollection)
 	ast.Walk(v, astFile)
 	return &v, nil
 }
@@ -358,9 +368,9 @@ func GetIndexTable(filename string) (map[uint32]*Handler, map[uint16]string, err
 			continue
 		}
 		astVisitor, err := collectBinlogArguments(astFile)
-		foundFmtStrings := len(*(astVisitor.fmtStrings))
-		if foundFmtStrings > 0 {
-			log.Printf("Found %d matches", foundFmtStrings)
+		callsCollectionCount := len(*(astVisitor.callsCollection))
+		if callsCollectionCount > 0 {
+			log.Printf("Found %d matches", callsCollectionCount)
 		}
 	}
 	if skipped != 0 {
