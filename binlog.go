@@ -281,15 +281,15 @@ func (v *astVisitor) Init(fmtStrings []string) {
 	v.fmtStrings = &fmtStrings
 }
 
-func (v astVisitor) Visit(n ast.Node) ast.Visitor {
-	if n == nil {
+func (v astVisitor) Visit(astNode ast.Node) ast.Visitor {
+	if astNode == nil {
 		return nil
 	}
 	var packageName string
 	var functionName string
 	var args []ast.Expr
 	var fmtString string
-	switch astCallExpr := n.(type) {
+	switch astCallExpr := astNode.(type) {
 	case *ast.CallExpr:
 		switch astSelectExpr := astCallExpr.Fun.(type) {
 		case *ast.SelectorExpr:
