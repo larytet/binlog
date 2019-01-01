@@ -133,6 +133,14 @@ Golang related stuff
 
 Decode binary streams using only the source files or the executable. Allow offline decode of the binary streams. Parse the Go sources or executable 
 collect and hash all strings in calls to the binlog. Should I assume that calls to the log look like xx.Log("...", arg1, ...)?
+What happens if there are two calls like this
+ 
+```Go
+bin.Log("Number %d", uint32(10))
+bin.Log("Number %d", uint64(10)) 
+```
+I need unique identification: (hash of) filename and line in the code
+ 
 
 Parse ELF route. Try ```readelf --hex-dump=.rodata  ELF-FILENAME```
 
