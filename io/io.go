@@ -33,10 +33,10 @@ func (s *Fifo) inc(v int) int {
 	return v
 }
 
-func (s *Fifo) WriteIntegral(value uint64, int count) (ok bool) {
+func (s *Fifo) WriteIntegral(value uint64, count int) (ok bool) {
 	newTail := s.inc(s.tail)
 	if s.head != newTail {
-		s.data[s.tail] = byte(value)
+		s.data[s.tail] = byte(value) // TODO
 		s.tail = newTail
 		return true
 	} else {
@@ -44,10 +44,10 @@ func (s *Fifo) WriteIntegral(value uint64, int count) (ok bool) {
 	}
 }
 
-func (s *Fifo) ReadIntegral(int count) (key uint64, ok bool) {
+func (s *Fifo) ReadIntegral(count int) (key uint64, ok bool) {
 	newHead := s.inc(s.head)
 	if s.head != s.tail {
-		key = s.data[s.head]
+		key = uint64(s.data[s.head]) // TODO
 		s.head = newHead
 		return key, true
 	} else {
