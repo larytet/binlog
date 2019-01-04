@@ -25,10 +25,14 @@ type binlogCall struct {
 
 type astVisitor struct {
 	callsCollection *[]binlogCall
+	astFile         *ast.File
+	tokenFileSet    *token.FileSet
 }
 
-func (v *astVisitor) Init(callsCollection []binlogCall) {
+func (v *astVisitor) Init(astFile *ast.File, tokenFileSet *token.FileSet, callsCollection []binlogCall) {
 	v.callsCollection = &callsCollection
+	v.tokenFileSet = tokenFileSet
+	v.astFile = astFile
 }
 
 func (v astVisitor) Visit(astNode ast.Node) ast.Visitor {
@@ -59,19 +63,22 @@ func (v astVisitor) Visit(astNode ast.Node) ast.Visitor {
 	}
 	switch arg0 := (args[0]).(type) {
 	case *ast.BasicLit:
-		//line:= astNode.Pos().
-		binlogCall := binlogCall{pos: astNode.Pos(), fmtString: arg0.Value}
+		pos := astNode.Pos()
+		posValue := v.tokenFileSet.PositionFor(pos, true)
+		log.Printf("posValue=%v fset=%p", posValue.String(), v.tokenFileSet)
+		line := posValue.Line
+		binlogCall := binlogCall{pos: pos, fmtString: arg0.Value, line: line}
 		*(v.callsCollection) = append(*(v.callsCollection), binlogCall)
 		log.Printf("%v", binlogCall)
 	}
 	return v
 }
 
-func collectBinlogArguments(astFile *ast.File) (*astVisitor, error) {
+func collectBinlogArguments(astFile *ast.File, tokenFileSet *token.FileSet) (*astVisitor, error) {
 	callsCollection := make([]binlogCall, 0)
 	//decls := astFile.Decls
 	var v astVisitor
-	(&v).Init(callsCollection)
+	(&v).Init(astFile, tokenFileSet, callsCollection)
 	ast.Walk(v, astFile)
 	return &v, nil
 }
@@ -100,14 +107,14 @@ func GetIndexTable(filename string) (map[uint32]*binlog.Handler, map[uint16]stri
 	skipped := 0
 	log.Printf("Going to process %d Go modules in the %s", len(goModules), filename)
 	for _, module := range goModules {
-		fset := token.NewFileSet()
-		astFile, err := parser.ParseFile(fset, module, nil, 0)
+		tokenFileSet := token.NewFileSet()
+		astFile, err := parser.ParseFile(tokenFileSet, module, nil, 0)
 		if err != nil {
 			log.Printf("Skipping %s, %v", module, err)
 			skipped++
 			continue
 		}
-		astVisitor, err := collectBinlogArguments(astFile)
+		astVisitor, err := collectBinlogArguments(astFile, tokenFileSet)
 		callsCollectionCount := len(*(astVisitor.callsCollection))
 		if callsCollectionCount > 0 {
 			log.Printf("Found %d matches", callsCollectionCount)
