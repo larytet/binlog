@@ -40,7 +40,7 @@ func collectVariadicArguments(moduleName string, line int, binlogCall *binlogCal
 		case *ast.Ident:
 			astIdentObjKind := astArg.Obj.Kind
 			if astIdentObjKind != ast.Var {
-				log.Printf("%s:%d:Variadic argument %s in %s is not supported", moduleName, line, astArg.Obj.Name, binlogCall.fmtString)
+				log.Printf("%s:%d:Variadic argument '%s' in '%s' is not supported", moduleName, line, astArg.Obj.Name, binlogCall.fmtString)
 				break
 			}
 			argType := reflect.TypeOf(astArg)
@@ -49,7 +49,7 @@ func collectVariadicArguments(moduleName string, line int, binlogCall *binlogCal
 		default:
 			argType := reflect.TypeOf(astArg)
 			argKind := argType.Kind()
-			log.Printf("%s:%d:Variadic argument %d (%v, %v) in %s is not supported", moduleName, line, idx, argType, argKind, binlogCall.fmtString)
+			log.Printf("%s:%d:Variadic argument #%d (%v, %v) in '%s' is not supported", moduleName, line, idx+1, argType, argKind, binlogCall.fmtString)
 		}
 	}
 }
