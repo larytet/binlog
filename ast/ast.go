@@ -65,11 +65,11 @@ func (v astVisitor) Visit(astNode ast.Node) ast.Visitor {
 	case *ast.BasicLit:
 		pos := astNode.Pos()
 		posValue := v.tokenFileSet.PositionFor(pos, true)
-		log.Printf("posValue=%v fset=%p", posValue.String(), v.tokenFileSet)
+		//log.Printf("posValue=%v fset=%p", posValue.String(), v.tokenFileSet)
 		line := posValue.Line
 		binlogCall := binlogCall{pos: pos, fmtString: arg0.Value, line: line}
 		*(v.callsCollection) = append(*(v.callsCollection), binlogCall)
-		log.Printf("%v", binlogCall)
+		//log.Printf("%v", binlogCall)
 	}
 	return v
 }
@@ -115,9 +115,10 @@ func GetIndexTable(filename string) (map[uint32]*binlog.Handler, map[uint16]stri
 			continue
 		}
 		astVisitor, err := collectBinlogArguments(astFile, tokenFileSet)
-		callsCollectionCount := len(*(astVisitor.callsCollection))
+		collection := *(astVisitor.callsCollection)
+		callsCollectionCount := len(collection)
 		if callsCollectionCount > 0 {
-			log.Printf("Found %d matches", callsCollectionCount)
+			log.Printf("Found %d matches %v", callsCollectionCount, collection[0])
 		}
 	}
 	if skipped != 0 {
