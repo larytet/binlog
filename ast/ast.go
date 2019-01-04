@@ -36,12 +36,16 @@ func (v *astVisitor) Init(astFile *ast.File, tokenFileSet *token.FileSet, callsC
 }
 
 func collectVariadicArguments(binlogCall *binlogCall, args []ast.Expr) {
-	for _, arg := range args[1:] {
+	for idx, arg := range args[1:] {
 		switch argI := (arg).(type) {
 		case *ast.BasicLit:
 			argType := reflect.TypeOf(argI)
 			argKind := argType.Kind()
 			binlogCall.args = append(binlogCall.args, binlogCallArg{argType: argType, argKind: argKind})
+		default:
+			argType := reflect.TypeOf(argI)
+			argKind := argType.Kind()
+			log.Printf("Variadic argument %d (%v, %v) in %s is not supported", idx, argType, argKind, binlogCall.fmtString)
 		}
 	}
 }

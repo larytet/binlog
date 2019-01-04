@@ -13,6 +13,8 @@ func TestBinlog(t *testing.T) {
 	constDataBase, constDataSize := binlog.GetSelfTextAddressSize()
 	binlog := binlog.Init(&buf, constDataBase, constDataSize)
 	binlog.Log("Hello %d", 10)
+	d := 11
+	binlog.Log("Hello %d", d)
 }
 
 func TestGetIndexTable(t *testing.T) {
