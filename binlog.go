@@ -53,6 +53,7 @@ type FormatArgs struct {
 	args      []*HandlerArg // list of functions to output the data correctly 1,4 or 8 bytes of integer
 }
 
+// Log() will call FrameStart()/FrameStart() for every log entry
 type WriterControl interface {
 	FrameStart(io.Writer)
 	FrameEnd(io.Writer)
