@@ -53,6 +53,11 @@ type FormatArgs struct {
 	args      []*HandlerArg // list of functions to output the data correctly 1,4 or 8 bytes of integer
 }
 
+type WriterControl interface {
+	FrameStart(io.Writer)
+	FrameEnd(io.Writer)
+}
+
 type Handler struct {
 	Args             FormatArgs
 	Address          uintptr // address of the string
@@ -84,6 +89,7 @@ type Binlog struct {
 	constDataSize uint
 	currentIndex  uint32
 	ioWriter      io.Writer
+	writerControl WriterControl
 
 	// Index in this array is a virtual address of the format string
 	// This is for fast lookup of constant strings from the executable
@@ -109,7 +115,7 @@ type Binlog struct {
 const ALIGNMENT uint = 8
 
 // constDataBase is an address of the initialzied const data, constDataSize is it's size
-func Init(ioWriter io.Writer, constDataBase uint, constDataSize uint) *Binlog {
+func Init(ioWriter io.Writer, writerControl WriterControl, constDataBase uint, constDataSize uint) *Binlog {
 	// allocate one handler more for handling default cases
 	constDataSize = constDataSize / ALIGNMENT
 	L1Cache := make([]*Handler, constDataSize+1)
@@ -123,7 +129,8 @@ func Init(ioWriter io.Writer, constDataBase uint, constDataSize uint) *Binlog {
 		L2Cache:              L2Cache,
 		Filenames:            filenames,
 		handlersLookupByHash: handlersLookupByHash,
-		ioWriter:             ioWriter}
+		ioWriter:             ioWriter,
+		writerControl:        writerControl}
 	return binlog
 }
 
@@ -142,6 +149,7 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 	if len(hArgs) != len(args) {
 		return fmt.Errorf("Number of args %d does not match log line %d", len(args), len(hArgs))
 	}
+	b.writerControl.FrameStart(b.ioWriter)
 	b.ioWriter.Write(h.hash)
 
 	if SEND_STRING_INDEX {
@@ -163,10 +171,12 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 		hArg := h.Args.args[i]
 		writer := hArg.writer
 		if err := b.writeArgumentToOutput(writer, arg); err != nil {
-			return fmt.Errorf("Failed to write value %v", err)
+			err = fmt.Errorf("Failed to write value %v", err)
+			break
 		}
 	}
-	return nil
+	b.writerControl.FrameEnd(b.ioWriter)
+	return err
 }
 
 type LogEntry struct {
