@@ -37,22 +37,30 @@ var ADD_SOURCE_LINE bool = false
 
 var binlogIndex uint64
 
+type DecodeArg struct {
+	argType reflect.Type // type of the argument
+	argKind reflect.Kind // "kind" of the argument, for example int32
+}
+
 type HandlerArg struct {
-	writer  writer
-	FmtVerb rune         // for example, x (from %x)
-	ArgType reflect.Type // type of the argument
-	ArgKind reflect.Kind // "kind" of the argument, for example int32
+	writer    writer
+	fmtVerb   rune // for example, x (from %x)
+	decodeArg DecodeArg
+}
+
+type FormatArgs struct {
+	fmtString string        // the format string itself for decoding
+	args      []*HandlerArg // list of functions to output the data correctly 1,4 or 8 bytes of integer
 }
 
 type Handler struct {
-	FmtString        string        // the format string itself for decoding
-	Address          uintptr       // address of the string
-	IsL1Cache        bool          // true if the string in the L1 cache
-	Args             []*HandlerArg // list of functions to output the data correctly 1,4 or 8 bytes of integer
-	HashUint         uint32        // hash of the format string
-	IndexUint        uint32        // hash of the format string
-	FilenameHashUint uint16        // hash of the filename
-	LineNumberUint   uint16        // source line number
+	Args             FormatArgs
+	Address          uintptr // address of the string
+	IsL1Cache        bool    // true if the string in the L1 cache
+	HashUint         uint32  // hash of the format string
+	IndexUint        uint32  // hash of the format string
+	FilenameHashUint uint16  // hash of the filename
+	LineNumberUint   uint16  // source line number
 
 	// I can output only byte slices, therefore I keep slices
 	index        []byte // a running index of the handler
@@ -130,7 +138,7 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 		return err
 	}
 
-	hArgs := h.Args
+	hArgs := h.Args.args
 	if len(hArgs) != len(args) {
 		return fmt.Errorf("Number of args %d does not match log line %d", len(args), len(hArgs))
 	}
@@ -152,7 +160,7 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 	}
 
 	for i, arg := range args {
-		hArg := h.Args[i]
+		hArg := h.Args.args[i]
 		writer := hArg.writer
 		if err := b.writeArgumentToOutput(writer, arg); err != nil {
 			return fmt.Errorf("Failed to write value %v", err)
@@ -232,17 +240,17 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 		}
 	}
 
-	hFmtString := h.FmtString
+	hFmtString := h.Args.fmtString
 	args := make([]interface{}, 0)
 	var value interface{}
 	var err error
 	// Read arguments from the binary stream
-	for _, hArg := range h.Args {
-		argType := hArg.ArgType
+	for _, hArg := range h.Args.args {
+		argType := hArg.decodeArg.argType
 		if isIntegral(argType) {
 			count := hArg.writer.getSize() // size of the integer I pushed into the binary stream
 			value, err = readIntegerFromReader(reader, count)
-		} else if hArg.ArgKind == reflect.String {
+		} else if hArg.decodeArg.argKind == reflect.String {
 			value, err = readStringFromReader(reader)
 		} else {
 			return nil, fmt.Errorf("Can not handle type %v", argType)
@@ -405,9 +413,9 @@ func intToSlice(v interface{}) []byte {
 
 func (b *Binlog) createHandler(fmtStr string, args []interface{}) (*Handler, error) {
 	var h Handler
-	h.FmtString = fmtStr
+	h.Args.fmtString = fmtStr
 	var err error
-	h.Args, err = parseLogLine(fmtStr, args)
+	h.Args.args, err = parseLogLine(fmtStr, args)
 	if err != nil {
 		return nil, err
 	}
@@ -606,11 +614,11 @@ func parseLogLine(gold string, args []interface{}) ([]*HandlerArg, error) {
 		switch r {
 		case 'x', 'd', 'i', 'c':
 			writer := &writerByteArray{count: count}
-			hArg := &HandlerArg{writer: writer, ArgType: argType, FmtVerb: r, ArgKind: argKind}
+			hArg := &HandlerArg{writer: writer, fmtVerb: r, decodeArg: DecodeArg{argType: argType, argKind: argKind}}
 			hArgs = append(hArgs, hArg)
 		case 's':
 			writer := &writerString{}
-			hArg := &HandlerArg{writer: writer, ArgType: argType, FmtVerb: r, ArgKind: argKind}
+			hArg := &HandlerArg{writer: writer, fmtVerb: r, decodeArg: DecodeArg{argType: argType, argKind: argKind}}
 			hArgs = append(hArgs, hArg)
 		default:
 			return nil, fmt.Errorf("Can not handle '%c' in %s: unknown format code", r, gold)

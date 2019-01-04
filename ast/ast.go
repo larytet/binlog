@@ -35,6 +35,9 @@ func (v *astVisitor) Init(astFile *ast.File, tokenFileSet *token.FileSet, callsC
 	v.astFile = astFile
 }
 
+func collectVariadicArguments(binlogCall binlogCall, args []ast.Expr) {
+}
+
 func (v astVisitor) Visit(astNode ast.Node) ast.Visitor {
 	if astNode == nil {
 		return nil
@@ -65,11 +68,11 @@ func (v astVisitor) Visit(astNode ast.Node) ast.Visitor {
 	case *ast.BasicLit:
 		pos := astNode.Pos()
 		posValue := v.tokenFileSet.PositionFor(pos, true)
-		//log.Printf("posValue=%v fset=%p", posValue.String(), v.tokenFileSet)
 		line := posValue.Line
 		binlogCall := binlogCall{pos: pos, fmtString: arg0.Value, line: line}
 		*(v.callsCollection) = append(*(v.callsCollection), binlogCall)
 		//log.Printf("%v", binlogCall)
+		collectVariadicArguments(binlogCall, args)
 	}
 	return v
 }

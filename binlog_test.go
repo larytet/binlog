@@ -213,8 +213,8 @@ func TestInt(t *testing.T) {
 		t.Fatalf("Wrong size of the filenames %d expected %d", len(filenames), 0)
 	}
 	for _, h := range indexTable {
-		if h.FmtString != fmtString {
-			t.Fatalf("Wrong format string '%s' instead of '%s' in the cache", h.FmtString, fmtString)
+		if h.Args.fmtString != fmtString {
+			t.Fatalf("Wrong format string '%s' instead of '%s' in the cache", h.Args.fmtString, fmtString)
 		}
 	}
 }
