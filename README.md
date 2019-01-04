@@ -46,7 +46,7 @@ import (
 func main() {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := binlog.GetSelfTextAddressSize()
-	binlog := binlog.Init(&buf, constDataBase, constDataSize)
+	binlog := binlog.Init(&buf, &WriterControlDummy{}, constDataBase, constDataSize)
 	binlog.Log("Hello %u", 10)
 }
 ```
