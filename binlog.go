@@ -59,6 +59,15 @@ type WriterControl interface {
 	FrameEnd(io.Writer)
 }
 
+type WriterControlDummy struct {
+}
+
+func (*WriterControlDummy) FrameStart(io.Writer) {
+}
+
+func (*WriterControlDummy) FrameEnd(io.Writer) {
+}
+
 type Handler struct {
 	Args             FormatArgs
 	Address          uintptr // address of the string
