@@ -24,28 +24,32 @@ type binlogCall struct {
 }
 
 type astVisitor struct {
+	moduleName      string
 	callsCollection *[]binlogCall
 	astFile         *ast.File
 	tokenFileSet    *token.FileSet
 }
 
-func (v *astVisitor) Init(astFile *ast.File, tokenFileSet *token.FileSet, callsCollection []binlogCall) {
-	v.callsCollection = &callsCollection
-	v.tokenFileSet = tokenFileSet
-	v.astFile = astFile
-}
-
-func collectVariadicArguments(binlogCall *binlogCall, args []ast.Expr) {
+func collectVariadicArguments(moduleName string, line int, binlogCall *binlogCall, args []ast.Expr) {
 	for idx, arg := range args[1:] {
 		switch astArg := (arg).(type) {
 		case *ast.BasicLit:
 			argType := reflect.TypeOf(astArg)
 			argKind := argType.Kind()
 			binlogCall.args = append(binlogCall.args, binlogCallArg{argType: argType, argKind: argKind})
+		case *ast.Ident:
+			astIdentObjKind := astArg.Obj.Kind
+			if astIdentObjKind != ast.Var {
+				log.Printf("%s:%d:Variadic argument %s in %s is not supported", moduleName, line, astArg.Obj.Name, binlogCall.fmtString)
+				break
+			}
+			argType := reflect.TypeOf(astArg)
+			argKind := argType.Kind()
+			binlogCall.args = append(binlogCall.args, binlogCallArg{argType: argType, argKind: argKind})
 		default:
 			argType := reflect.TypeOf(astArg)
 			argKind := argType.Kind()
-			log.Printf("Variadic argument %d (%v, %v) in %s is not supported", idx, argType, argKind, binlogCall.fmtString)
+			log.Printf("%s:%d:Variadic argument %d (%v, %v) in %s is not supported", moduleName, line, idx, argType, argKind, binlogCall.fmtString)
 		}
 	}
 }
@@ -83,19 +87,18 @@ func (v astVisitor) Visit(astNode ast.Node) ast.Visitor {
 		line := posValue.Line
 		binlogCall := binlogCall{pos: pos, fmtString: arg0.Value, line: line}
 		//log.Printf("%v", binlogCall)
-		collectVariadicArguments(&binlogCall, args)
+		collectVariadicArguments(v.moduleName, line, &binlogCall, args)
 		*(v.callsCollection) = append(*(v.callsCollection), binlogCall)
 	}
 	return v
 }
 
-func collectBinlogArguments(astFile *ast.File, tokenFileSet *token.FileSet) (*astVisitor, error) {
+func collectBinlogArguments(moduleName string, astFile *ast.File, tokenFileSet *token.FileSet) (*astVisitor, error) {
 	callsCollection := make([]binlogCall, 0)
 	//decls := astFile.Decls
-	var v astVisitor
-	(&v).Init(astFile, tokenFileSet, callsCollection)
+	v := &astVisitor{moduleName: moduleName, callsCollection: &callsCollection, astFile: astFile, tokenFileSet: tokenFileSet}
 	ast.Walk(v, astFile)
-	return &v, nil
+	return v, nil
 }
 
 // This function is a work in progress, requires walking the Go AST
@@ -129,7 +132,7 @@ func GetIndexTable(filename string) (map[uint32]*binlog.Handler, map[uint16]stri
 			skipped++
 			continue
 		}
-		astVisitor, err := collectBinlogArguments(astFile, tokenFileSet)
+		astVisitor, err := collectBinlogArguments(module, astFile, tokenFileSet)
 		collection := *(astVisitor.callsCollection)
 		callsCollectionCount := len(collection)
 		if callsCollectionCount > 0 {
