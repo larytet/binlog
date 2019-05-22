@@ -27,9 +27,8 @@ ok  	binlog	5.324s
 ```
 		
 
-**Warning!** This code pushes Go quite to it's limit. There is unsafe pointers, ATS walk, StringHeader,
-explicitly-forbidden, anti-pattern. not-best-practice, makes-me-sick galore for the taste of many.
-If you prefer to trade performance for compliance try https://github.com/ScottMansfield/nanolog 
+**Warning!** This code pushes Go quite to it's limit. You will see unsafe pointers, ATS walk, StringHeader,
+explicitly-forbidden, anti-pattern, not-best-practice, makes-me-sick galore. If you prefer to trade performance for compliance try https://github.com/ScottMansfield/nanolog 
 
 # Usage
 
