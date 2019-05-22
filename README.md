@@ -3,8 +3,7 @@
 This is likely the fastest possible implementation of a log in Golang or close to it. 
 The original idea is https://github.com/ScottMansfield/nanolog/issues/4
 
-binlog will allow you to keep logging in many cases when the peformance of the official log package is too low.
-Produced binary logs are small, encoding is fast. You pay only for variadic data you send. 
+binlog will allow you to keep logging in cases when the peformance of the official log package is too low and has significant impact on the service latency. Produced binary logs are small, encoding is fast. You pay only for variadic data you send. 
 Output of a string without variadic arguments (logger adds hash of the string to the binary stream) will set you back by 15 nano seconds. Every additional argument of the integral type costs ~10ns if this is a constant, 20ns if the argument is not a constant. 
 binlog.Log() is 3x faster than fmt.Fprintf() API for an empty string and 30x faster for four arguments. 
 
