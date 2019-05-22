@@ -1,6 +1,6 @@
 # About
 
-This is likely the fastest possible implementation of a log in Golang or close to it. 
+binlog is a binary log. This is likely the fastest possible implementation of a log in Golang or close to it. 
 The original idea is https://github.com/ScottMansfield/nanolog/issues/4
 
 binlog will allow you to keep logging in cases when the peformance of the official log package is too low and has significant impact on the service latency. Produced binary logs are small, encoding is fast. You pay only for variadic data you send. 
