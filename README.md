@@ -27,7 +27,7 @@ ok  	binlog	5.324s
 ```
 		
 
-**Warning!** This code pushes Go quite to it's limit. You will see unsafe pointers, ATS walk, StringHeader,
+**Warning!** This code pushes Go quite to its limit. You will see unsafe pointers, ATS walk, StringHeader,
 explicitly-forbidden, anti-pattern, not-best-practice, makes-me-sick galore. If you prefer to trade performance for compliance try https://github.com/ScottMansfield/nanolog 
 
 # Usage
@@ -57,7 +57,7 @@ If there is a cache miss the Log() collects all required data, adds the format s
 If there is a cache hit the Log() outputs hash of the format string and all variadic parameters to the specified io.Writer
 If the string is not from the .text section (allocated from a heap, for example) the Log() stores the string in the map ("level 2 cache").
 
-The cache (L1 and L2) contains the information required for dedocding and formatting of the binary data. Things like size 
+The cache (L1 and L2) contains the information required for decoding and formatting of the binary data. Things like size 
 of the argument, format "verb", number of arguments, hash of the format string, the format string are all in the cache. 
 
 
@@ -83,12 +83,12 @@ as well.
 
 The API is not thread safe. One possible workaround is to have an instance of the binlog in every thread. 
 The application is expected to flush the output to a file/stdout from time to time.
-An applicattion can share the io.Writer object between the binary logs if the application implements WriterControl.
+An application can share the io.Writer object between the binary logs if the application implements WriterControl.
 Add index and/or a timestamp (see SEND_LOG_INDEX) to all log entries, order the log entries when printing for human consumption. Atomic counter will set you back 
 by 25ns per call (Go sync/atomic is not very fast).
 
 This logger will not work well for applications which allocate format strings dynamically, like in the code below. The performance will be similar to 
-ZAP log & some of it's faster friends.  
+ZAP log & some of its faster friends.  
 
 ```Go
 {
@@ -147,7 +147,7 @@ Add suport for "float", "char"
 
 Add a "writer" based on FIFO. The idea is to "allocate" the necessary number of bytes from the FIFO starting from the tail, mark the start of the block as "allocated", return a pointer to the 
 allocated block. The application copies the data to the block, marks the block as "initialized". The "consumer" (a thread which dumps the logs) reverses the process.
-When allocating blocks the FIFO always allocates continuous memory areas. If there is not enough place between tail and end of the FIFO the allocator marks 
+When allocating blocks the FIFO always allocates continuous memory areas. If there is not enough place between the tail and the end of the FIFO the allocator marks 
 the unused area as skipped and attempts to allocate a block from offset zero.
 
 **Add run-time sorting and compression of the logs**. Use a parameter for the window size. 
