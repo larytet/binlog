@@ -18,6 +18,7 @@ import (
 
 	"github.com/golang/glog"
 	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
 
 	"github.com/larytet-go/moduledata"
 	"github.com/larytet-go/sprintf"
@@ -431,15 +432,72 @@ func (w *DummyIoWriter) Write(data []byte) (int, error) {
 func (w *DummyIoWriter) Grow(size int) {
 }
 
-func BenchmarkFmtLogrus(b *testing.B) {
-	contextLogger := logrus.WithFields(logrus.Fields{})
+func BenchmarkFmtPrintf(b *testing.B) {
+	f, _ := os.Create("/dev/null")
+	defer f.Close()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		contextLogger.Info("")
+		fmt.Fprintf(f, "")
 	}
 }
 
-func BenchmarkFmtGlog(b *testing.B) {
+func BenchmarkZAP(b *testing.B) {
+	cfg := zap.NewProductionConfig()
+	cfg.OutputPaths = []string{
+		"/dev/null",
+	}
+	logger, _ := cfg.Build()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Error("")
+	}
+	logger.Sync()
+}
+
+func BenchmarkZAPConstInt(b *testing.B) {
+	cfg := zap.NewProductionConfig()
+	cfg.OutputPaths = []string{
+		"/dev/null",
+	}
+	logger, _ := cfg.Build()
+	constInt := zap.Int("", 3)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Error("", constInt)
+	}
+	logger.Sync()
+}
+
+func BenchmarkZAPInt4(b *testing.B) {
+	cfg := zap.NewProductionConfig()
+	cfg.OutputPaths = []string{
+		"/dev/null",
+	}
+	logger, _ := cfg.Build()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Error("", zap.Int("", i), zap.Int("", i+1), zap.Int("", i+2), zap.Int("", i+3))
+	}
+	logger.Sync()
+}
+
+func BenchmarkLogrus(b *testing.B) {
+	logrus.SetFormatter(&logrus.JSONFormatter{
+		DisableTimestamp: true,
+		PrettyPrint:      false,
+	})
+	contextLogger := logrus.WithFields(logrus.Fields{})
+	f, _ := os.Create("/dev/null")
+	defer f.Close()
+	logrus.SetOutput(f)
+	logrus.SetLevel(logrus.DebugLevel)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		contextLogger.Debug("")
+	}
+}
+
+func BenchmarkGlog(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		glog.Infof("")
