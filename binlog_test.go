@@ -432,6 +432,51 @@ func (w *DummyIoWriter) Write(data []byte) (int, error) {
 func (w *DummyIoWriter) Grow(size int) {
 }
 
+func BenchmarkBinLogConstInt(b *testing.B) {
+	var buf DummyIoWriter
+	buf.Grow(b.N * (8 + 4 + 4 + 8))
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	fmtString := "Hello %d"
+	binlog := Init(&buf, &WriterControlDummy{}, constDataBase, constDataSize)
+	binlog.Log(fmtString, 10) // Cache the first entry
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		binlog.Log(fmtString, 10)
+	}
+}
+
+func BenchmarkBinLogEmptyString(b *testing.B) {
+	var buf DummyIoWriter
+	buf.Grow(b.N * (4 + 4 + 8))
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	fmtString := "Hello"
+	binlog := Init(&buf, &WriterControlDummy{}, constDataBase, constDataSize)
+	// Cache the first entry
+	binlog.Log(fmtString)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		binlog.Log(fmtString)
+	}
+}
+
+func BenchmarkBinLogInt4(b *testing.B) {
+	var buf DummyIoWriter
+	buf.Grow(b.N * (8 + 4 + 4 + 8 + 8 + 8 + 8))
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	fmtString := "Hello %d %d %d %d"
+	binlog := Init(&buf, &WriterControlDummy{}, constDataBase, constDataSize)
+	// Cache the first entry
+	args := []interface{}{i, i + 1, i + 2, i + 3}
+	binlog.Log(fmtString, args...)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		args := []interface{}{i, i + 1, i + 2, i + 3}
+		binlog.Log(fmtString, args...)
+	}
+}
+
 func BenchmarkFmtPrintf(b *testing.B) {
 	f, _ := os.Create("/dev/null")
 	defer f.Close()
@@ -606,22 +651,6 @@ func BenchmarkEmptyString(b *testing.B) {
 		b.Fatalf(" L1Cache hist is %d instead of %d", statistics.L1CacheHit, b.N)
 	}
 	//b.Logf(sprintf.SprintfStructure(statistics, 4, "  %15s %9d", nil))
-}
-
-func BenchmarkSingleInt(b *testing.B) {
-	var buf DummyIoWriter
-	buf.Grow(b.N * (8 + 4 + 4 + 8))
-	constDataBase, constDataSize := GetSelfTextAddressSize()
-	fmtString := "Hello %d"
-	binlog := Init(&buf, &WriterControlDummy{}, constDataBase, constDataSize)
-	// Cache the first entry
-	binlog.Log(fmtString, 10)
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		binlog.Log(fmtString, 10)
-	}
-	b.StopTimer()
 }
 
 // Force Go compiler to allocate an object every time
