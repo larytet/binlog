@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"os"
 	"reflect"
@@ -14,6 +15,8 @@ import (
 	"testing"
 	"time"
 	"unsafe"
+
+	"github.com/golang/glog"
 
 	"github.com/larytet-go/moduledata"
 	"github.com/larytet-go/sprintf"
@@ -425,6 +428,24 @@ func (w *DummyIoWriter) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 func (w *DummyIoWriter) Grow(size int) {
+}
+
+func BenchmarkFmtGlog(b *testing.B) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		glog.Infof("")
+	}
+}
+
+func BenchmarkFmtLog(b *testing.B) {
+	logger := log.New(os.Stdout, "", 0)
+	f, _ := os.Create("/dev/null")
+	defer f.Close()
+	logger.SetOutput(f)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Printf("")
+	}
 }
 
 func BenchmarkFmtSprintf(b *testing.B) {
