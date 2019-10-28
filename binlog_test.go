@@ -427,39 +427,6 @@ func (w *DummyIoWriter) Write(data []byte) (int, error) {
 func (w *DummyIoWriter) Grow(size int) {
 }
 
-func benchmarkMap(b *testing.B, size int) {
-	m := make(map[int]string)
-	for i := 0; i < size; i++ {
-		m[i] = fmt.Sprintf("%d", i)
-	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if _, ok := m[i%size]; !ok {
-			b.Fatalf("Key %d not found in the map", i)
-		}
-	}
-}
-
-func BenchmarkMap(b *testing.B) {
-	benchmarks := []struct {
-		name string
-		size int
-	}{
-		{"Map 1K", 1000},
-		{"Map 10K", 10 * 1000},
-		{"Map 100K", 100 * 1000},
-		{"Map 1M", 1 * 1000 * 1000},
-		{"Map 10M", 10 * 1000 * 1000},
-		{"Map 20M", 20 * 1000 * 1000},
-		{"Map 50M", 50 * 1000 * 1000},
-	}
-	for _, bm := range benchmarks {
-		b.Run(bm.name, func(b *testing.B) {
-			benchmarkMap(b, bm.size)
-		})
-	}
-}
-
 func BenchmarkFmtSprintf(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		s := fmt.Sprintf("")
@@ -490,6 +457,39 @@ func BenchmarkFmtSprintfInt2(b *testing.B) {
 func BenchmarkFmtSprintfInt4(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		fmt.Sprintf("%d %d %d %d", i, i+1, i+2, i+3)
+	}
+}
+
+func benchmarkMap(b *testing.B, size int) {
+	m := make(map[int]string)
+	for i := 0; i < size; i++ {
+		m[i] = fmt.Sprintf("%d", i)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, ok := m[i%size]; !ok {
+			b.Fatalf("Key %d not found in the map", i)
+		}
+	}
+}
+
+func BenchmarkMap(b *testing.B) {
+	benchmarks := []struct {
+		name string
+		size int
+	}{
+		{"Map 1K", 1000},
+		{"Map 10K", 10 * 1000},
+		{"Map 100K", 100 * 1000},
+		{"Map 1M", 1 * 1000 * 1000},
+		{"Map 10M", 10 * 1000 * 1000},
+		{"Map 20M", 20 * 1000 * 1000},
+		{"Map 50M", 50 * 1000 * 1000},
+	}
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			benchmarkMap(b, bm.size)
+		})
 	}
 }
 
