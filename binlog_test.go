@@ -467,7 +467,7 @@ func BenchmarkBinLogInt4(b *testing.B) {
 	fmtString := "Hello %d %d %d %d"
 	binlog := Init(&buf, &WriterControlDummy{}, constDataBase, constDataSize)
 	// Cache the first entry
-	args := []interface{}{i, i + 1, i + 2, i + 3}
+	args := []interface{}{0, 1, 2, 3}
 	binlog.Log(fmtString, args...)
 	b.ResetTimer()
 
