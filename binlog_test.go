@@ -17,6 +17,7 @@ import (
 	"unsafe"
 
 	"github.com/golang/glog"
+	"github.com/sirupsen/logrus"
 
 	"github.com/larytet-go/moduledata"
 	"github.com/larytet-go/sprintf"
@@ -428,6 +429,14 @@ func (w *DummyIoWriter) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 func (w *DummyIoWriter) Grow(size int) {
+}
+
+func BenchmarkFmtLogrus(b *testing.B) {
+	contextLogger := logrus.WithFields(logrus.Fields{})
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		contextLogger.Info("")
+	}
 }
 
 func BenchmarkFmtGlog(b *testing.B) {
