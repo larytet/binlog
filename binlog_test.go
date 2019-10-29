@@ -440,7 +440,7 @@ func BenchmarkZAPStrInt4(b *testing.B) {
 	logger, _ := cfg.Build()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		logger.Error("Hello", zap.Int("", i), zap.Int("", i+1), zap.Int("", i+2), zap.Int("", i+3))
+		logger.Error("Hello", zap.Int("", i), zap.Int("", i+1), zap.Int("", i+2))
 	}
 	logger.Sync()
 }
