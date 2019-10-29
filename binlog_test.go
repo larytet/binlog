@@ -452,24 +452,23 @@ func BenchmarkZAPInt4Simple(b *testing.B) {
 }
 
 func BenchmarkZAPThreads(b *testing.B) {
+	//
 	cfg := zap.NewProductionConfig()
 	cfg.OutputPaths = []string{
 		"/dev/null",
 	}
 	logger, _ := cfg.Build()
-	logger.Sync()
-	ch1 := make(chan bool)
-	ch2 := make(chan bool)
+	ch1, ch2 := make(chan bool), make(chan bool)
 	b.ResetTimer()
-	f := func(logger *zap.Logger, count int, ch chan bool) {
-		for i := 0; i < count; i++ {
+	f := func(ch chan bool) {
+		for i := 0; i < b.N/2; i++ {
 			logger.Error("")
 		}
 		logger.Sync()
 		ch <- true
 	}
-	go f(logger, b.N/2, ch1)
-	go f(logger, b.N/2, ch2)
+	go f(ch1)
+	go f(ch2)
 	<-ch1
 	<-ch2
 }
