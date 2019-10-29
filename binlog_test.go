@@ -437,6 +437,20 @@ func (w *DummyIoWriter) Grow(size int) {
 func init() {
 }
 
+func BenchmarkZAPInt4Simple(b *testing.B) {
+	cfg := zap.NewProductionConfig()
+	cfg.OutputPaths = []string{
+		"/dev/null",
+	}
+	logger, _ := cfg.Build()
+	sugar := logger.Sugar()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sugar.Infof("%d %d %d %d", i, i+1, i+2, i+3)
+	}
+	sugar.Sync()
+}
+
 func benchmarkZAP(logger *zap.Logger, count int, ch chan bool) {
 	for i := 0; i < count; i++ {
 		logger.Error("")
@@ -522,20 +536,6 @@ func BenchmarkBinLogConstInt(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		binlog.Log("Hello %d", 0)
 	}
-}
-
-func BenchmarkZAPInt4Simple(b *testing.B) {
-	cfg := zap.NewProductionConfig()
-	cfg.OutputPaths = []string{
-		"/dev/null",
-	}
-	logger, _ := cfg.Build()
-	sugar := logger.Sugar()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		sugar.Infof("%d %d %d %d", i, i+1, i+2, i+3)
-	}
-	sugar.Sync()
 }
 
 func BenchmarkGlog(b *testing.B) {
