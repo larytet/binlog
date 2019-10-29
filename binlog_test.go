@@ -464,13 +464,13 @@ func BenchmarkZAPThreads(b *testing.B) {
 		for i := 0; i < b.N/2; i++ {
 			logger.Error("")
 		}
-		logger.Sync()
 		close(ch)
 	}
 	go f(ch1)
 	go f(ch2)
 	<-ch1
 	<-ch2
+	logger.Sync()
 }
 
 func BenchmarkKlog(b *testing.B) {
