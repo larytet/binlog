@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"debug/elf"
 	"encoding/binary"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -17,6 +18,7 @@ import (
 	"unsafe"
 
 	"github.com/golang/glog"
+	"github.com/kubernetes/klog"
 	"github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 
@@ -432,6 +434,93 @@ func (w *DummyIoWriter) Write(data []byte) (int, error) {
 func (w *DummyIoWriter) Grow(size int) {
 }
 
+func init() {
+}
+
+func BenchmarkZAPConstInt(b *testing.B) {
+	cfg := zap.NewProductionConfig()
+	cfg.OutputPaths = []string{
+		"/dev/null",
+	}
+	logger, _ := cfg.Build()
+	constInt := zap.Int("", 3)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Error("", constInt)
+	}
+	logger.Sync()
+}
+
+func BenchmarkZAP(b *testing.B) {
+	cfg := zap.NewProductionConfig()
+	cfg.OutputPaths = []string{
+		"/dev/null",
+	}
+	logger, _ := cfg.Build()
+	logger.Sync()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Error("")
+	}
+}
+
+func BenchmarkBinLogConstInt(b *testing.B) {
+	var buf DummyIoWriter
+	buf.Grow(b.N * (8 + 4 + 4 + 8))
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	binlog := Init(&buf, &WriterControlDummy{}, constDataBase, constDataSize)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		binlog.Log("Hello %d", 0)
+	}
+}
+
+func BenchmarkZAPInt4Simple(b *testing.B) {
+	cfg := zap.NewProductionConfig()
+	cfg.OutputPaths = []string{
+		"/dev/null",
+	}
+	logger, _ := cfg.Build()
+	sugar := logger.Sugar()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sugar.Infof("%d %d %d %d", i, i+1, i+2, i+3)
+	}
+	sugar.Sync()
+}
+
+func BenchmarkKlog(b *testing.B) {
+	flag.Set("logtostderr", "false")
+	flag.Set("log_file", "/dev/null")
+	flag.Parse()
+	klogFlags := flag.NewFlagSet("klog", flag.ExitOnError)
+	klog.InitFlags(klogFlags)
+
+	// Sync the glog and klog flags.
+	flag.CommandLine.VisitAll(func(f1 *flag.Flag) {
+		f2 := klogFlags.Lookup(f1.Name)
+		if f2 != nil {
+			value := f1.Value.String()
+			f2.Value.Set(value)
+		}
+	})
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		klog.Infof("")
+	}
+	klog.Flush()
+}
+
+func BenchmarkGlog(b *testing.B) {
+	flag.Parse()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		glog.Infof("")
+	}
+	glog.Flush()
+}
+
 func BenchmarkBinLogL2Cache(b *testing.B) {
 	var buf DummyIoWriter
 	buf.Grow(b.N * (8 + 4 + 4 + 8))
@@ -442,31 +531,6 @@ func BenchmarkBinLogL2Cache(b *testing.B) {
 	binlog.Log(fmtString, 10)
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
-		binlog.Log(fmtString, 10)
-	}
-}
-func BenchmarkZAPStrInt4(b *testing.B) {
-	cfg := zap.NewProductionConfig()
-	cfg.OutputPaths = []string{
-		"/dev/null",
-	}
-	logger, _ := cfg.Build()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		logger.Error("Hello", zap.Int("", i), zap.Int("", i+1), zap.Int("", i+2))
-	}
-	logger.Sync()
-}
-
-func BenchmarkBinLogConstInt(b *testing.B) {
-	var buf DummyIoWriter
-	buf.Grow(b.N * (8 + 4 + 4 + 8))
-	constDataBase, constDataSize := GetSelfTextAddressSize()
-	fmtString := "Hello %d"
-	binlog := Init(&buf, &WriterControlDummy{}, constDataBase, constDataSize)
-	binlog.Log(fmtString, 10) // Cache the first entry
-	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		binlog.Log(fmtString, 10)
 	}
@@ -511,33 +575,6 @@ func BenchmarkFmtPrintf(b *testing.B) {
 	}
 }
 
-func BenchmarkZAP(b *testing.B) {
-	cfg := zap.NewProductionConfig()
-	cfg.OutputPaths = []string{
-		"/dev/null",
-	}
-	logger, _ := cfg.Build()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		logger.Error("")
-	}
-	logger.Sync()
-}
-
-func BenchmarkZAPConstInt(b *testing.B) {
-	cfg := zap.NewProductionConfig()
-	cfg.OutputPaths = []string{
-		"/dev/null",
-	}
-	logger, _ := cfg.Build()
-	constInt := zap.Int("", 3)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		logger.Error("", constInt)
-	}
-	logger.Sync()
-}
-
 func BenchmarkZAPInt4(b *testing.B) {
 	cfg := zap.NewProductionConfig()
 	cfg.OutputPaths = []string{
@@ -564,13 +601,6 @@ func BenchmarkLogrus(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		contextLogger.Debug("")
-	}
-}
-
-func BenchmarkGlog(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		glog.Infof("")
 	}
 }
 
