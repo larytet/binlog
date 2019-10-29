@@ -458,7 +458,7 @@ func BenchmarkZAPThreads(b *testing.B) {
 		"/dev/null",
 	}
 	logger, _ := cfg.Build()
-	ch1, ch2 := make(chan struct{}, 1), make(chan struct{}, 1)
+	ch1, ch2 := make(chan struct{}), make(chan struct{})
 	b.ResetTimer()
 	f := func(ch chan struct{}) {
 		for i := 0; i < b.N/2; i++ {
