@@ -432,6 +432,21 @@ func (w *DummyIoWriter) Write(data []byte) (int, error) {
 func (w *DummyIoWriter) Grow(size int) {
 }
 
+func BenchmarkBinLogL2Cache(b *testing.B) {
+	var buf DummyIoWriter
+	buf.Grow(b.N * (8 + 4 + 4 + 8))
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	fmtString := fmt.Sprintf("%s %%d", "Hello")
+	binlog := Init(&buf, &WriterControlDummy{}, constDataBase, constDataSize)
+	// Cache the first entry
+	binlog.Log(fmtString, 10)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		binlog.Log(fmtString, 10)
+	}
+}
+
 func BenchmarkBinLogConstInt(b *testing.B) {
 	var buf DummyIoWriter
 	buf.Grow(b.N * (8 + 4 + 4 + 8))
