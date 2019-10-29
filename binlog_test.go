@@ -437,6 +437,55 @@ func (w *DummyIoWriter) Grow(size int) {
 func init() {
 }
 
+func benchmarkZAP(logger *zap.Logger, count int, ch chan bool) {
+	for i := 0; i < count; i++ {
+		logger.Error("")
+	}
+	logger.Sync()
+	ch <- true
+}
+
+func BenchmarkZAPThreads(b *testing.B) {
+	cfg := zap.NewProductionConfig()
+	cfg.OutputPaths = []string{
+		"/dev/null",
+	}
+	logger, _ := cfg.Build()
+	logger.Sync()
+	ch1 := make(chan bool)
+	ch2 := make(chan bool)
+	b.ResetTimer()
+	go benchmarkZAP(logger, b.N/2, ch1)
+	go benchmarkZAP(logger, b.N/2, ch2)
+	<-ch1
+	<-ch2
+}
+
+func BenchmarkKlog(b *testing.B) {
+	flag.Set("logtostderr", "false")
+	flag.Set("log_file", "/dev/null")
+	flag.Parse()
+	klogFlags := flag.NewFlagSet("klog", flag.ExitOnError)
+	klog.InitFlags(klogFlags)
+	f, _ := os.Create("/dev/null")
+	defer f.Close()
+	klog.SetOutput(f)
+
+	// Sync the glog and klog flags.
+	flag.CommandLine.VisitAll(func(f1 *flag.Flag) {
+		f2 := klogFlags.Lookup(f1.Name)
+		if f2 != nil {
+			value := f1.Value.String()
+			f2.Value.Set(value)
+		}
+	})
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		klog.Infof("")
+	}
+}
+
 func BenchmarkZAPConstInt(b *testing.B) {
 	cfg := zap.NewProductionConfig()
 	cfg.OutputPaths = []string{
@@ -487,29 +536,6 @@ func BenchmarkZAPInt4Simple(b *testing.B) {
 		sugar.Infof("%d %d %d %d", i, i+1, i+2, i+3)
 	}
 	sugar.Sync()
-}
-
-func BenchmarkKlog(b *testing.B) {
-	flag.Set("logtostderr", "false")
-	flag.Set("log_file", "/dev/null")
-	flag.Parse()
-	klogFlags := flag.NewFlagSet("klog", flag.ExitOnError)
-	klog.InitFlags(klogFlags)
-
-	// Sync the glog and klog flags.
-	flag.CommandLine.VisitAll(func(f1 *flag.Flag) {
-		f2 := klogFlags.Lookup(f1.Name)
-		if f2 != nil {
-			value := f1.Value.String()
-			f2.Value.Set(value)
-		}
-	})
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		klog.Infof("")
-	}
-	klog.Flush()
 }
 
 func BenchmarkGlog(b *testing.B) {
