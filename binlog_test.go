@@ -432,6 +432,19 @@ func (w *DummyIoWriter) Write(data []byte) (int, error) {
 func (w *DummyIoWriter) Grow(size int) {
 }
 
+func BenchmarkZAPStrInt4(b *testing.B) {
+	cfg := zap.NewProductionConfig()
+	cfg.OutputPaths = []string{
+		"/dev/null",
+	}
+	logger, _ := cfg.Build()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		logger.Error("Hello", zap.Int("", i), zap.Int("", i+1), zap.Int("", i+2), zap.Int("", i+3))
+	}
+	logger.Sync()
+}
+
 func BenchmarkBinLogConstInt(b *testing.B) {
 	var buf DummyIoWriter
 	buf.Grow(b.N * (8 + 4 + 4 + 8))
