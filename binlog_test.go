@@ -437,6 +437,51 @@ func (w *DummyIoWriter) Grow(size int) {
 func init() {
 }
 
+func BenchmarkFmtSprintf(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		s := fmt.Sprintf("")
+		if s != "" {
+			b.Fatalf("Should be empty")
+		}
+	}
+}
+
+func BenchmarkFmtSprintfConstInt(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		fmt.Sprintf("%d", 0)
+	}
+}
+
+func BenchmarkFmtSprintfInt(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		fmt.Sprintf("%d", i)
+	}
+}
+
+func BenchmarkFmtSprintfInt2(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		fmt.Sprintf("%d %d", i, i+1)
+	}
+}
+
+func BenchmarkFmtSprintfInt4(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		fmt.Sprintf("%d %d %d %d", i, i+1, i+2, i+3)
+	}
+}
+
+func BenchmarkFmtSprintfInt6(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		fmt.Sprintf("%d %d %d %d %d %d", i, i+1, i+2, i+3, i+4, i+5)
+	}
+}
+
+func BenchmarkFmtSprintfInt8(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		fmt.Sprintf("%d %d %d %d %d %d %d %d", i, i+1, i+2, i+3, i+4, i+5, i+6, i+7)
+	}
+}
+
 func BenchmarkZAPInt4Simple(b *testing.B) {
 	cfg := zap.NewProductionConfig()
 	cfg.OutputPaths = []string{
@@ -636,39 +681,6 @@ func BenchmarkFmtLog(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		logger.Printf("")
-	}
-}
-
-func BenchmarkFmtSprintf(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		s := fmt.Sprintf("")
-		if s != "" {
-			b.Fatalf("Should be empty")
-		}
-	}
-}
-
-func BenchmarkFmtSprintfConstInt(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		fmt.Sprintf("%d", 0)
-	}
-}
-
-func BenchmarkFmtSprintfInt(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		fmt.Sprintf("%d", i)
-	}
-}
-
-func BenchmarkFmtSprintfInt2(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		fmt.Sprintf("%d %d", i, i+1)
-	}
-}
-
-func BenchmarkFmtSprintfInt4(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		fmt.Sprintf("%d %d %d %d", i, i+1, i+2, i+3)
 	}
 }
 
