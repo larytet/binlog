@@ -443,23 +443,21 @@ func fastHTTPHandler(ctx *fasthttp.RequestCtx) {
 }
 
 func BenchmarkFastHTTP(b *testing.B) {
-	url := ":8080"
-	go fasthttp.ListenAndServe(url, fastHTTPHandler)
-
+	go fasthttp.ListenAndServe(":8080", fastHTTPHandler)
 	req := fasthttp.AcquireRequest()
-	req.SetRequestURI(url)
+	req.SetRequestURI("http://127.0.0.1:8080")
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		resp := fasthttp.AcquireResponse()
-		fasthttp.Do(req, resp)
+		if err := fasthttp.Do(req, resp); err != nil {
+			b.Fatalf("%v", err)
+		}
 		status := resp.StatusCode()
 		if status != fasthttp.StatusOK {
 			b.Fatalf("Status %d", status)
 		}
 		fasthttp.ReleaseResponse(resp)
 	}
-	b.StopTimer()
-	fasthttp.ReleaseRequest(req)
 }
 
 func BenchmarkFmtSprintf(b *testing.B) {
