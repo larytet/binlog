@@ -24,6 +24,7 @@ import (
 
 	"github.com/larytet-go/moduledata"
 	"github.com/larytet-go/sprintf"
+	"github.com/valyala/fasthttp"
 )
 
 func align(v uintptr) uintptr {
@@ -435,6 +436,30 @@ func (w *DummyIoWriter) Grow(size int) {
 }
 
 func init() {
+}
+
+func fastHTTPHandler(ctx *fasthttp.RequestCtx) {
+	fmt.Fprintf(ctx, "Ok")
+}
+
+func BenchmarkFastHTTP(b *testing.B) {
+	url := ":8080"
+	go fasthttp.ListenAndServe(url, fastHTTPHandler)
+
+	req := fasthttp.AcquireRequest()
+	req.SetRequestURI(url)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		resp := fasthttp.AcquireResponse()
+		fasthttp.Do(req, resp)
+		status := resp.StatusCode()
+		if status != fasthttp.StatusOK {
+			b.Fatalf("Status %d", status)
+		}
+		fasthttp.ReleaseResponse(resp)
+	}
+	b.StopTimer()
+	fasthttp.ReleaseRequest(req)
 }
 
 func BenchmarkFmtSprintf(b *testing.B) {
