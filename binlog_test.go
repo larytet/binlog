@@ -442,6 +442,7 @@ func fastHTTPHandler(ctx *fasthttp.RequestCtx) {
 	fmt.Fprintf(ctx, "Ok")
 }
 
+// Based on https://github.com/valyala/fasthttp/issues/599
 func BenchmarkFastHTTP(b *testing.B) {
 	go fasthttp.ListenAndServe(":8080", fastHTTPHandler)
 	req := fasthttp.AcquireRequest()
