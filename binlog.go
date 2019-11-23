@@ -136,13 +136,13 @@ type Binlog struct {
 // ALIGNMENT is the size of a pointer in the data section
 const ALIGNMENT uint = 8
 
-func timestampDummy() int64 {
+func TimestampDummy() int64 {
 	return 0
 }
 
 // Init is depreciated, use New() instead
 func Init(ioWriter io.Writer, writerControl WriterControl, constDataBase uint, constDataSize uint) *Binlog {
-	return New(Config{ioWriter, writerControl, constDataBase, constDataSize, timestampDummy})
+	return New(Config{ioWriter, writerControl, constDataBase, constDataSize, TimestampDummy})
 }
 
 // New returns a new instance of the logger

@@ -635,7 +635,7 @@ func BenchmarkBinLogConstIntFullFeatured(b *testing.B) {
 	var buf DummyIoWriter
 	buf.Grow(b.N * (8 + 4 + 4 + 8))
 	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, TimestampDummy})
 	SEND_LOG_INDEX, SEND_STRING_INDEX, ADD_SOURCE_LINE, ADD_TIMESTAMP = false, false, true, true
 
 	b.ResetTimer()
