@@ -326,6 +326,7 @@ func TestPrint(t *testing.T) {
 		SEND_LOG_INDEX = p.sendLogIndex
 		SEND_STRING_INDEX = p.sendStringIndex
 		ADD_SOURCE_LINE = p.addSourceLine
+		ADD_TIMESTAMP = p.addTimestamp
 		testPrint(t)
 	}
 }
@@ -624,6 +625,19 @@ func BenchmarkBinLogConstInt(b *testing.B) {
 	buf.Grow(b.N * (8 + 4 + 4 + 8))
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		binlog.Log("Hello %d", 0)
+	}
+}
+
+func BenchmarkBinLogConstIntFullFeatured(b *testing.B) {
+	var buf DummyIoWriter
+	buf.Grow(b.N * (8 + 4 + 4 + 8))
+	constDataBase, constDataSize := GetSelfTextAddressSize()
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
+	SEND_LOG_INDEX, SEND_STRING_INDEX, ADD_SOURCE_LINE, ADD_TIMESTAMP = false, false, true, true
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		binlog.Log("Hello %d", 0)
