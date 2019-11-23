@@ -6,8 +6,6 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"fmt"
-	"github.com/larytet-go/procfs"
-	"github.com/larytet-go/procfs/maps"
 	"io"
 	"log"
 	"os"
@@ -16,6 +14,9 @@ import (
 	"sync/atomic"
 	"unicode/utf8"
 	"unsafe"
+
+	"github.com/larytet-go/procfs"
+	"github.com/larytet-go/procfs/maps"
 )
 
 //import "C"
@@ -94,12 +95,16 @@ type Statistics struct {
 	StringOOM      uint64
 }
 
+type Config struct {
+	IOWriter      io.Writer
+	WriterControl WriterControl
+	ConstDataBase uint
+	ConstDataSize uint
+}
+
 type Binlog struct {
-	constDataBase uint
-	constDataSize uint
-	currentIndex  uint32
-	ioWriter      io.Writer
-	writerControl WriterControl
+	config       Config
+	currentIndex uint32
 
 	// Index in this array is a virtual address of the format string
 	// This is for fast lookup of constant strings from the executable
@@ -122,25 +127,25 @@ type Binlog struct {
 	statistics           Statistics
 }
 
+// ALIGNMENT is the size of a pointer in the data section
 const ALIGNMENT uint = 8
 
+// New returns a new instance of the logger
 // constDataBase is an address of the initialzied const data, constDataSize is it's size
-func Init(ioWriter io.Writer, writerControl WriterControl, constDataBase uint, constDataSize uint) *Binlog {
+func New(config Config) *Binlog {
 	// allocate one handler more for handling default cases
-	constDataSize = constDataSize / ALIGNMENT
-	L1Cache := make([]*Handler, constDataSize+1)
+	config.ConstDataSize = config.ConstDataSize / ALIGNMENT
+	L1Cache := make([]*Handler, config.ConstDataSize+1)
 	L2Cache := make(map[string]*Handler)
 	filenames := make(map[uint16]string)
 	handlersLookupByHash := make(map[uint32]*Handler)
 	binlog := &Binlog{
-		constDataBase:        constDataBase,
-		constDataSize:        constDataSize,
+		config:               config,
 		L1Cache:              L1Cache,
 		L2Cache:              L2Cache,
 		Filenames:            filenames,
 		handlersLookupByHash: handlersLookupByHash,
-		ioWriter:             ioWriter,
-		writerControl:        writerControl}
+	}
 	return binlog
 }
 
@@ -148,7 +153,7 @@ func (b *Binlog) GetStatistics() Statistics {
 	return b.statistics
 }
 
-// This is similar to fmt.Fprintf(b.ioWriter, fmtStr, args)
+// This is similar to fmt.Fprintf(b.config.IOWriter, fmtStr, args)
 func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 	h, err := b.getHandler(fmtStr, args)
 	if err != nil {
@@ -159,22 +164,22 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 	if len(hArgs) != len(args) {
 		return fmt.Errorf("Number of args %d does not match log line %d", len(args), len(hArgs))
 	}
-	b.writerControl.FrameStart(b.ioWriter)
-	b.ioWriter.Write(h.hash)
+	b.config.WriterControl.FrameStart(b.config.IOWriter)
+	b.config.IOWriter.Write(h.hash)
 
 	if SEND_STRING_INDEX {
-		b.ioWriter.Write(h.index)
+		b.config.IOWriter.Write(h.index)
 	}
 
 	if ADD_SOURCE_LINE {
-		b.ioWriter.Write(h.filenameHash)
-		b.ioWriter.Write(h.lineNumber)
+		b.config.IOWriter.Write(h.filenameHash)
+		b.config.IOWriter.Write(h.lineNumber)
 	}
 
 	if SEND_LOG_INDEX {
 		logIndex := atomic.AddUint64(&binlogIndex, 1)
 		writer := writerByteArray{count: 8}
-		(&writer).write(b.ioWriter, unsafe.Pointer(&logIndex))
+		(&writer).write(b.config.IOWriter, unsafe.Pointer(&logIndex))
 	}
 
 	for i, arg := range args {
@@ -185,7 +190,7 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 			break
 		}
 	}
-	b.writerControl.FrameEnd(b.ioWriter)
+	b.config.WriterControl.FrameEnd(b.config.IOWriter)
 	return err
 }
 
@@ -407,14 +412,14 @@ func getStringAddress(s string) uint {
 // Returning one integer shaves 10% off the overall vs return uint, error
 // Golang inlines this function?
 func (b *Binlog) getStringIndex(s string) uint {
-	sDataOffset := (getStringAddress(s) - b.constDataBase) / ALIGNMENT
-	if sDataOffset < b.constDataSize {
+	sDataOffset := (getStringAddress(s) - b.config.ConstDataBase) / ALIGNMENT
+	if sDataOffset < b.config.ConstDataSize {
 		b.statistics.StringOffsetOk++
 		return sDataOffset
 	} else {
 		b.statistics.StringOOM++
-		// fmt.Errorf("String %x is out of address range %x-%x", getStringAddress(s), b.constDataBase, b.constDataBase+b.constDataSize*ALIGNMENT)
-		return b.constDataSize
+		// fmt.Errorf("String %x is out of address range %x-%x", getStringAddress(s), b.config.ConstDataBase, b.config.ConstDataBase+b.config.ConstDataSize*ALIGNMENT)
+		return b.config.ConstDataSize
 	}
 }
 
@@ -465,7 +470,7 @@ func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*Handler, error)
 	var sIndex uint
 	var isMiss bool = false
 	sIndex = b.getStringIndex(fmtStr)
-	if sIndex != b.constDataSize {
+	if sIndex != b.config.ConstDataSize {
 		h = b.L1Cache[sIndex]
 		if h != nil { // fast cache hit? (20% of the whole function is here. Blame CPU data cache?)
 			b.statistics.L1CacheHit++
@@ -523,10 +528,10 @@ func (b *Binlog) writeArgumentToOutput_Slow(writer writer, arg interface{}) erro
 	var v uint64
 	if k := rv.Kind(); k >= reflect.Int && k < reflect.Uint {
 		v = uint64(rv.Int())
-		err = writer.write(b.ioWriter, unsafe.Pointer(&v))
+		err = writer.write(b.config.IOWriter, unsafe.Pointer(&v))
 	} else if k <= reflect.Uintptr {
 		v = rv.Uint()
-		err = writer.write(b.ioWriter, unsafe.Pointer(&v))
+		err = writer.write(b.config.IOWriter, unsafe.Pointer(&v))
 	} else {
 		return fmt.Errorf("Unsupported type: %T\n", reflect.TypeOf(arg))
 	}
@@ -540,34 +545,34 @@ func (b *Binlog) writeArgumentToOutput_Faster(writer writer, arg interface{}) er
 	switch arg := arg.(type) {
 	case int:
 		i := uint64(arg)
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+		err = writer.write(b.config.IOWriter, unsafe.Pointer(&i))
 	case int8:
 		i := uint64(arg)
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+		err = writer.write(b.config.IOWriter, unsafe.Pointer(&i))
 	case int16:
 		i := uint64(arg)
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+		err = writer.write(b.config.IOWriter, unsafe.Pointer(&i))
 	case int32:
 		i := uint64(arg)
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+		err = writer.write(b.config.IOWriter, unsafe.Pointer(&i))
 	case int64:
 		i := uint64(arg)
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+		err = writer.write(b.config.IOWriter, unsafe.Pointer(&i))
 	case uint8:
 		i := uint64(arg)
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+		err = writer.write(b.config.IOWriter, unsafe.Pointer(&i))
 	case uint16:
 		i := uint64(arg)
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+		err = writer.write(b.config.IOWriter, unsafe.Pointer(&i))
 	case uint32:
 		i := uint64(arg)
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+		err = writer.write(b.config.IOWriter, unsafe.Pointer(&i))
 	case uint64:
 		i := uint64(arg)
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+		err = writer.write(b.config.IOWriter, unsafe.Pointer(&i))
 	case uint:
 		i := uint64(arg)
-		err = writer.write(b.ioWriter, unsafe.Pointer(&i))
+		err = writer.write(b.config.IOWriter, unsafe.Pointer(&i))
 	default:
 		return fmt.Errorf("Unsupported type: %T\n", reflect.TypeOf(arg))
 	}
@@ -597,7 +602,7 @@ func (b *Binlog) writeArgumentToOutput(writer writer, arg interface{}) error {
 	var err error
 	// writer.write() expects an unsafe pointer
 	// writer will copy the required number of bytes to the output binary stream
-	err = writer.write(b.ioWriter, getInterfaceData(arg))
+	err = writer.write(b.config.IOWriter, getInterfaceData(arg))
 	return err
 }
 
