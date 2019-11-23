@@ -220,7 +220,7 @@ type LogEntry struct {
 	FmtString  string
 	Args       []interface{}
 	Index      uint64
-	Timestamp  uint64
+	Timestamp  int64
 }
 
 // DecodeNext converts one record from the binary stream to a human readable format
@@ -288,7 +288,7 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 	if ADD_TIMESTAMP {
 		// Read 64 bits of timestamp from the stream
 		if timestamp, err := readIntegerFromReader(reader, 8); err == nil {
-			logEntry.Timestamp = timestamp
+			logEntry.Timestamp = int64(timestamp)
 		} else {
 			return nil, fmt.Errorf("Failed to read timestamp err=%v", err)
 		}
