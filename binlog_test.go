@@ -163,7 +163,7 @@ func TestReadme(t *testing.T) {
 func TestInt(t *testing.T) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := Init(&buf, &WriterControlDummy{}, constDataBase, constDataSize)
 	fmtString := "Hello %d"
 	rand.Seed(42)
 	value0 := rand.Int31()
