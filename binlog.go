@@ -37,6 +37,9 @@ var SEND_STRING_INDEX = false
 // calls to the Log() use unique string. There is a test which ensures this
 var ADD_SOURCE_LINE = false
 
+// ADD_TIMESTAMP enables timestamping of the log messages
+var ADD_TIMESTAMP = false
+
 var binlogIndex uint64
 
 type DecodeArg struct {
@@ -102,6 +105,7 @@ type Config struct {
 	WriterControl WriterControl
 	ConstDataBase uint
 	ConstDataSize uint
+	Timestamp     func() int64
 }
 
 type Binlog struct {
@@ -132,9 +136,13 @@ type Binlog struct {
 // ALIGNMENT is the size of a pointer in the data section
 const ALIGNMENT uint = 8
 
+func timestampDummy() int64 {
+	return 0
+}
+
 // Init is depreciated, use New() instead
 func Init(ioWriter io.Writer, writerControl WriterControl, constDataBase uint, constDataSize uint) *Binlog {
-	return New(Config{ioWriter, writerControl, constDataBase, constDataSize})
+	return New(Config{ioWriter, writerControl, constDataBase, constDataSize, timestampDummy})
 }
 
 // New returns a new instance of the logger
@@ -188,6 +196,11 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 		writer := writerByteArray{count: 8}
 		(&writer).write(b.config.IOWriter, unsafe.Pointer(&logIndex))
 	}
+	if ADD_TIMESTAMP {
+		timestamp := b.config.Timestamp()
+		writer := writerByteArray{count: 8}
+		(&writer).write(b.config.IOWriter, unsafe.Pointer(&timestamp))
+	}
 
 	for i, arg := range args {
 		hArg := h.Args.args[i]
@@ -207,6 +220,7 @@ type LogEntry struct {
 	FmtString  string
 	Args       []interface{}
 	Index      uint64
+	Timestamp  uint64
 }
 
 // DecodeNext converts one record from the binary stream to a human readable format
@@ -269,6 +283,14 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 			logEntry.Index = logEntryIndex
 		} else {
 			return nil, fmt.Errorf("Failed to read log index err=%v", err)
+		}
+	}
+	if ADD_TIMESTAMP {
+		// Read 64 bits of timestamp from the stream
+		if timestamp, err := readIntegerFromReader(reader, 8); err == nil {
+			logEntry.Timestamp = timestamp
+		} else {
+			return nil, fmt.Errorf("Failed to read timestamp err=%v", err)
 		}
 	}
 

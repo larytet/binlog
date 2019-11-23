@@ -23,6 +23,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/larytet-go/moduledata"
+	"github.com/larytet-go/nanotime"
 	"github.com/larytet-go/sprintf"
 	"github.com/valyala/fasthttp"
 )
@@ -156,7 +157,7 @@ func TestStringLocationGlobalLocal(t *testing.T) {
 func TestReadme(t *testing.T) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 	binlog.Log("Hello %d", 10)
 }
 
@@ -232,7 +233,7 @@ func TestInt(t *testing.T) {
 func testPrint(t *testing.T) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 	rand.Seed(42)
 
 	value := rand.Uint64()
@@ -267,35 +268,58 @@ type testParameters struct {
 	sendLogIndex    bool
 	sendStringIndex bool
 	addSourceLine   bool
+	addTimestamp    bool
 }
 
 func TestPrint(t *testing.T) {
 	var tests = []testParameters{
 		testParameters{
-			false, false, true,
+			false, false, true, false,
 		},
 		testParameters{
-			false, true, false,
+			false, true, false, false,
 		},
 		testParameters{
-			false, true, true,
+			false, true, true, false,
 		},
 		testParameters{
-			true, false, false,
+			true, false, false, false,
 		},
 		testParameters{
-			true, false, true,
+			true, false, true, false,
 		},
 		testParameters{
-			true, true, false,
+			true, true, false, false,
 		},
 		testParameters{
-			true, true, true,
+			true, true, true, false,
+		},
+
+		testParameters{
+			false, false, true, true,
+		},
+		testParameters{
+			false, true, false, true,
+		},
+		testParameters{
+			false, true, true, true,
+		},
+		testParameters{
+			true, false, false, true,
+		},
+		testParameters{
+			true, false, true, true,
+		},
+		testParameters{
+			true, true, false, true,
+		},
+		testParameters{
+			true, true, true, true,
 		},
 
 		// Last test is all FALSE
 		testParameters{
-			false, false, false,
+			false, false, false, false,
 		},
 	}
 	for _, p := range tests {
@@ -313,7 +337,7 @@ type testPrintIntegersParameters struct {
 func testPrintIntegers(t *testing.T, arg interface{}) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 
 	fmtString := "Hello %d"
 	err := binlog.Log(fmtString, arg)
@@ -373,7 +397,7 @@ func TestPrintIntegers(t *testing.T) {
 func TestPrintString(t *testing.T) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 
 	fmtString := "Hello %s"
 	arg := "world"
@@ -396,7 +420,7 @@ func TestPrintString(t *testing.T) {
 func TestPrint2Ints(t *testing.T) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 	rand.Seed(42)
 
 	value := rand.Uint64()
@@ -599,7 +623,7 @@ func BenchmarkBinLogConstInt(b *testing.B) {
 	var buf DummyIoWriter
 	buf.Grow(b.N * (8 + 4 + 4 + 8))
 	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		binlog.Log("Hello %d", 0)
@@ -620,7 +644,7 @@ func BenchmarkBinLogL2Cache(b *testing.B) {
 	buf.Grow(b.N * (8 + 4 + 4 + 8))
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	fmtString := fmt.Sprintf("%s %%d", "Hello")
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 	// Cache the first entry
 	binlog.Log(fmtString, 10)
 	b.ResetTimer()
@@ -635,7 +659,7 @@ func BenchmarkBinLogEmptyString(b *testing.B) {
 	buf.Grow(b.N * (4 + 4 + 8))
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	fmtString := "Hello"
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 	// Cache the first entry
 	binlog.Log(fmtString)
 	b.ResetTimer()
@@ -650,7 +674,7 @@ func BenchmarkBinLogInt4(b *testing.B) {
 	buf.Grow(b.N * (8 + 4 + 4 + 8 + 8 + 8 + 8))
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	fmtString := "Hello %d %d %d %d"
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 	// Cache the first entry
 	binlog.Log(fmtString, 0, 1, 2, 3)
 	b.ResetTimer()
@@ -747,7 +771,7 @@ func BenchmarkEmptyString(b *testing.B) {
 	buf.Grow(b.N * (4 + 4 + 8))
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	fmtString := "Hello"
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 	// Cache the first entry
 	binlog.Log(fmtString)
 	b.ResetTimer()
@@ -777,7 +801,7 @@ func BenchmarkSingleIntRogerPeppe(b *testing.B) {
 	buf.Grow(b.N * (8 + 4 + 4 + 8))
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	fmtString := "Hello %d"
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 	// Cache the first entry
 	binlog.Log(fmtString, 10)
 	b.ResetTimer()
@@ -793,7 +817,7 @@ func BenchmarkSingleIntL2Cache(b *testing.B) {
 	buf.Grow(b.N * (8 + 4 + 4 + 8))
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	fmtString := fmt.Sprintf("%s %%d", "Hello")
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 	// Cache the first entry
 	binlog.Log(fmtString, 10)
 	b.ResetTimer()
@@ -819,7 +843,7 @@ func Benchmark2Ints(b *testing.B) {
 	buf.Grow(b.N * (8 + 4 + 4 + 8))
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	fmtString := "Hello %d %d"
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 	args := []interface{}{10, 20}
 	// Cache the first entry
 	binlog.Log(fmtString, args...)
@@ -836,7 +860,7 @@ func Benchmark3Ints(b *testing.B) {
 	buf.Grow(b.N * (8 + 4 + 4 + 8))
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	fmtString := "Hello %d %d %d"
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 	args := []interface{}{10, 20, 30}
 	// Cache the first entry
 	binlog.Log(fmtString, args...)
@@ -857,7 +881,7 @@ func Benchmark3IntsLogIndex(b *testing.B) {
 	buf.Grow(b.N * (8 + 4 + 4 + 8))
 	constDataBase, constDataSize := GetSelfTextAddressSize()
 	fmtString := "Hello %d %d %d"
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 	args := []interface{}{10, 20, 30}
 	// Cache the first entry
 	binlog.Log(fmtString, args...)
@@ -874,7 +898,7 @@ func Benchmark3IntsLogIndex(b *testing.B) {
 func TestL2Cache(t *testing.T) {
 	var buf bytes.Buffer
 	constDataBase, constDataSize := GetSelfTextAddressSize()
-	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize})
+	binlog := New(Config{&buf, &WriterControlDummy{}, constDataBase, constDataSize, nanotime.Now})
 	rand.Seed(42)
 
 	value := rand.Uint64()
