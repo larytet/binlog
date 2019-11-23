@@ -270,7 +270,7 @@ type testParameters struct {
 }
 
 func TestPrint(t *testing.T) {
-	var tests []testParameters = []testParameters{
+	var tests = []testParameters{
 		testParameters{
 			false, false, true,
 		},
@@ -333,7 +333,7 @@ func testPrintIntegers(t *testing.T, arg interface{}) {
 }
 
 func TestPrintIntegers(t *testing.T) {
-	var tests []testPrintIntegersParameters = []testPrintIntegersParameters{
+	var tests = []testPrintIntegersParameters{
 		testPrintIntegersParameters{
 			uint8(5),
 		},

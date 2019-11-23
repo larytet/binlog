@@ -21,20 +21,21 @@ import (
 
 //import "C"
 
-// Add unique system level running counter of logs
-var SEND_LOG_INDEX bool = false
+// SEND_LOG_INDEX enables unique system level running counter of logs
+var SEND_LOG_INDEX = false
 
+// SEND_STRING_INDEX enables sending the index of the format string
 // I keep hash of the format string and index of the string in the
 // cache. When I decode the binary stream I can ensure that both 32 bits hash
 // and index of the string match. This flag is useful for debug or fast lookup
 // when decoding binary streams
-var SEND_STRING_INDEX bool = false
+var SEND_STRING_INDEX = false
 
-// Add hash of the filename (16 bits) and line in the source (16 bits)
-// to the binary stream
+// ADD_SOURCE_LINE enables adding hash of the filename (16 bits)
+// and line in the source (16 bits) to the binary stream
 // I assume the the goloang does not dedups the constant strings and all
 // calls to the Log() use unique string. There is a test which ensures this
-var ADD_SOURCE_LINE bool = false
+var ADD_SOURCE_LINE = false
 
 var binlogIndex uint64
 
@@ -54,6 +55,7 @@ type FormatArgs struct {
 	args      []*HandlerArg // list of functions to output the data correctly 1,4 or 8 bytes of integer
 }
 
+// WriterControl can be empty, like in WriterControlDummy
 // Log() will call FrameStart()/FrameStart() for every log entry
 type WriterControl interface {
 	FrameStart(io.Writer)
@@ -158,7 +160,7 @@ func (b *Binlog) GetStatistics() Statistics {
 	return b.statistics
 }
 
-// This is similar to fmt.Fprintf(b.config.IOWriter, fmtStr, args)
+// Log is similar to fmt.Fprintf(b.config.IOWriter, fmtStr, args)
 func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 	h, err := b.getHandler(fmtStr, args)
 	if err != nil {
@@ -207,13 +209,13 @@ type LogEntry struct {
 	Index      uint64
 }
 
-// Convert one record from the binary stream to a human readable format
+// DecodeNext converts one record from the binary stream to a human readable format
 func (b *Binlog) DecodeNext(reader io.Reader) (*LogEntry, error) {
 	indexTable, filenames := b.GetIndexTable()
 	return DecodeNext(reader, indexTable, filenames)
 }
 
-// Convert one record from the binary stream to a human readable format
+// DecodeNext converts one record from the binary stream to a human readable format
 // You want to fmt.Sprintf(LogEntry.fmtString, LogEntry.args)
 // This API is slow - relies heavily on reflection, allocates strings and slices.
 // The idea is that I will not call this API often, and when I call the API I
@@ -224,7 +226,7 @@ func (b *Binlog) DecodeNext(reader io.Reader) (*LogEntry, error) {
 // 2. find the format string and arguments in the L1 or L2 cache
 // 3. Read arguments from the binary stream
 func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[uint16]string) (*LogEntry, error) {
-	var logEntry *LogEntry = &LogEntry{}
+	var logEntry = &LogEntry{}
 	var h *Handler
 	// Read format string hash
 	if hashUint, err := readIntegerFromReader(reader, 4); err == nil {
@@ -299,7 +301,7 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 	return logEntry, nil
 }
 
-// Returns a map[hash]
+// GetIndexTable returns a map[hash]
 // Application can use the map for decoding of the binary stread
 // Pay attention that the map is getting updated every time a new string appears
 func (b *Binlog) GetIndexTable() (map[uint32]*Handler, map[uint16]string) {
@@ -470,10 +472,10 @@ func (b *Binlog) createHandler(fmtStr string, args []interface{}) (*Handler, err
 // If this is not the case I try to use a map (8x slower)
 // The end result of this function is a new handler for the fmtStr in L1 or L2 cache
 func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*Handler, error) {
-	var h *Handler = &defaultHandler
+	var h = &defaultHandler
 	var err error
 	var sIndex uint
-	var isMiss bool = false
+	var isMiss = false
 	sIndex = b.getStringIndex(fmtStr)
 	if sIndex != b.config.ConstDataSize {
 		h = b.L1Cache[sIndex]
@@ -686,7 +688,7 @@ func getTextAddressSize(maps []*maps.Maps) (constDataBase uint, constDataSize ui
 	return 0, 0
 }
 
-// Return base address and size of the text segment
+// GetSelfTextAddressSize returns base address and size of the text segment
 // There are two ways to do this - procfs or moduledata
 func GetSelfTextAddressSize() (constDataBase uint, constDataSize uint) {
 	selfPid := os.Getpid()
@@ -745,7 +747,7 @@ func (w *writerString) getSize() int {
 // Write 16 bits length of the string followed by the string itself
 func (w *writerString) write(ioWriter io.Writer, data unsafe.Pointer) error {
 	// I am doing something which https://golang.org/pkg/unsafe/ explicitly forbids
-	var hdr *reflect.StringHeader = (*reflect.StringHeader)(data)
+	var hdr = (*reflect.StringHeader)(data)
 	writer := &writerByteArray{2}
 	if err := writer.write(ioWriter, unsafe.Pointer(&(hdr.Len))); err != nil {
 		return err
