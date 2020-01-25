@@ -142,10 +142,11 @@ bin.Log("Number %d", uint64(10))
 ```
 I need unique identification: (hash of) filename and line in the code
  
-
 Parse ELF route. Try ```readelf --hex-dump=.rodata  ELF-FILENAME```
 
 Add suport for "float", "char"
+
+Output hash of the constant strings instead of strings themselves. More AST stuff here.
 
 Add a "writer" based on FIFO. The idea is to "allocate" the necessary number of bytes from the FIFO starting from the tail, mark the start of the block as "allocated", return a pointer to the 
 allocated block. The application copies the data to the block, marks the block as "initialized". The "consumer" (a thread which dumps the logs) reverses the process.

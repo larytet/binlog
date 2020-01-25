@@ -767,6 +767,7 @@ func (w *writerString) getSize() int {
 }
 
 // Write 16 bits length of the string followed by the string itself
+// TODO: if the string is const I need only it's hash
 func (w *writerString) write(ioWriter io.Writer, data unsafe.Pointer) error {
 	// I am doing something which https://golang.org/pkg/unsafe/ explicitly forbids
 	var hdr = (*reflect.StringHeader)(data)
