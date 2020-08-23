@@ -1,3 +1,8 @@
+<div class='epigraph'>
+So you wrote a logging library
+That don't impress me much
+</div>
+
 # About
 
 binlog is a binary log. This is likely the fastest possible implementation of a log in Golang or close to it. 
