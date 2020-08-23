@@ -1,4 +1,4 @@
-*So you wrote a logging library
+*So you wrote a logging library<p>
 That don't impress me much*
 
 # About
