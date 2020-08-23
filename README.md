@@ -1,5 +1,7 @@
-*                                                   So you wrote a logging library
-                                                    That don't impress me much*
+<div style="text-align: right">
+*So you wrote a logging library
+That don't impress me much*
+</div> 
 
 # About
 
