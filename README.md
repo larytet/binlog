@@ -1,7 +1,5 @@
-<div class='epigraph'>
-So you wrote a logging library
-That don't impress me much
-</div>
+*                                                   So you wrote a logging library
+                                                    That don't impress me much*
 
 # About
 
