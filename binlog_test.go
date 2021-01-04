@@ -18,7 +18,7 @@ import (
 	"unsafe"
 
 	"github.com/golang/glog"
-	"github.com/kubernetes/klog"
+//	"github.com/k8s.io/klog"
 	"github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 
@@ -568,6 +568,7 @@ func BenchmarkZAPThreads(b *testing.B) {
 	logger.Sync()
 }
 
+/*
 func BenchmarkKlog(b *testing.B) {
 	flag.Set("logtostderr", "false")
 	flag.Set("log_file", "/dev/null")
@@ -592,6 +593,7 @@ func BenchmarkKlog(b *testing.B) {
 		klog.Infof("")
 	}
 }
+*/
 
 func BenchmarkZAPConstInt(b *testing.B) {
 	cfg := zap.NewProductionConfig()
