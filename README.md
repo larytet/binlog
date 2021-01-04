@@ -156,3 +156,4 @@ When allocating blocks the FIFO always allocates continuous memory areas. If the
 the unused area as skipped and attempts to allocate a block from offset zero.
 
 **Add run-time sorting and compression of the logs**. Use a parameter for the window size. 
+**Integration with Megalog and ElasticSearch**
