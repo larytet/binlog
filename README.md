@@ -68,6 +68,8 @@ of the argument, format "verb", number of arguments, hash of the format string, 
 You need something like ```../../bin/dep ensure --update``` or something like 
 ```go get "github.com/larytet-go/procfs" "github.com/larytet-go/sprintf"  "github.com/larytet-go/moduledata"``` to install missing packages
 
+After all packages are installed this should work ```go test .```
+
 # Limitations
 
 I did not test for Windows. 
