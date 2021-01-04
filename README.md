@@ -30,7 +30,7 @@ ok  	binlog	5.324s
 ```
 		
 
-**Warning!** This code pushes Go quite to its limit. You will see unsafe pointers galore, ATS walk, StringHeader, explicitly forbidden, not-best-practice, makes-me-sick anti-patterns. If you prefer to trade performance for typical code conventions compliance try https://github.com/ScottMansfield/nanolog 
+**Warning!** This code pushes Go quite to its limit. You will see unsafe pointers galore, ATS walk, StringHeader, explicitly forbidden, not-best-practice, makes-me-sick anti-patterns. If you prefer to trade performance for the typical code conventions compliance try https://github.com/ScottMansfield/nanolog 
 
 # Usage
 
