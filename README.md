@@ -62,6 +62,11 @@ If the string is not from the .text section (allocated from a heap, for example)
 The cache (L1 and L2) contains the information required for decoding and formatting of the binary data. Things like size 
 of the argument, format "verb", number of arguments, hash of the format string, the format string are all in the cache. 
 
+The performance gain comes from two things
+
+* Significantly less data is being sent to the output
+* The outcome of the parsing of the format string is cached.
+
 
 # Install
 
@@ -81,7 +86,7 @@ The code relies on the facts that:
 
 Deduplication of the strings is a real possibility in the future. Deduplication is a trivial thing to implement given the Go AST. If Go starts to dedup the strings I 
 will need a larger key in the cache than just an address of the string. This will seriously impact the performance. If you care about fast logging
-make sure to vote/post comment here https://github.com/golang/go/issues/28864. May be one day "log" package will cache the strings and support a binary output
+make sure to vote/post comment here https://github.com/golang/go/issues/28864. May be one day "log" package will cache the format strings and support a binary output
 as well. 
 
 
