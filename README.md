@@ -127,6 +127,7 @@ More benchmark for different logging frameworks (Spoiler: doing nothing NOP logg
 * https://godoc.org/github.com/alexcesaro/log/stdlog
 * https://github.com/hashicorp/logutils
 * https://github.com/romana/rlog
+* https://github.com/morganstanley/binlog   C++ binlog
 
 Golang related stuff 
 
