@@ -93,7 +93,7 @@ as well.
 The API is not thread safe. One possible workaround is to have an instance of the binlog in every thread. 
 The application is expected to flush the output to a file/stdout from time to time.
 An application can share the io.Writer object between the binary logs if the application implements WriterControl.
-Add index and/or a timestamp (see SEND_LOG_INDEX) to all log entries, order the log entries when printing for human consumption. Atomic counter will set you back 
+Add index and/or a timestamp (see SEND_LOG_INDEX) to all log entries, sort the log entries when printing for human consumption. Atomic counter will set you back 
 by 25ns per call (Go sync/atomic is not very fast).
 
 This logger will not work well for applications which allocate format strings dynamically, like in the code below. The performance will be similar to 
