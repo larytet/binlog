@@ -74,25 +74,26 @@ After all packages are installed this should work ```go test .```
 
 I did not test for Windows. 
 
-The code relies on the facts that:
+The code relies on these assumptions:
  
-*  the strings in Go are located in the same ELF file segment.
-*  ELF has a unique address for every string in the source code.
+*  Go string literals are located in the same ELF segment.
+*  ELF provides a unique address for each string literal in the source code.
 
-Deduplication of the strings is a real possibility in the future. Deduplication is a trivial thing to implement given the Go AST. If Go starts to dedup the strings I 
-will need a larger key in the cache than just an address of the string. This will seriously impact the performance. If you care about fast logging
-make sure to vote/post comment here https://github.com/golang/go/issues/28864. May be one day "log" package will cache the format strings and support a binary output
-as well. 
+String deduplication may become a real issue in the future. If Go starts deduplicating strings, the cache key will need to be larger than a single string address. That will hurt performance.
 
+If fast logging matters to you, please comment or vote here: https://github.com/golang/go/issues/28864
 
-The API is not thread safe. One possible workaround is to have an instance of the binlog in every thread. 
-The application is expected to flush the output to a file/stdout from time to time.
-An application can share the io.Writer object between the binary logs if the application implements WriterControl.
-Add index and/or a timestamp (see SEND_LOG_INDEX) to all log entries, sort the log entries when printing for human consumption. Atomic counter will set you back 
-by 25ns per call (Go sync/atomic is not very fast).
+Maybe one day the standard `log` package will cache format strings and support binary output as well.
 
-This logger will not work well for applications which allocate format strings dynamically, like in the code below. The performance will be similar to 
-ZAP log & some of its faster friends.  
+The API is not thread safe. One possible workaround is to keep one binlog instance per thread.
+
+The application is expected to flush output to a file or to stdout from time to time.
+
+An application can share an `io.Writer` between multiple binary loggers if it implements `WriterControl`.
+
+You can also add an index or timestamp to all log entries, sort them later, and print them in human readable order. An atomic counter costs about 25 ns per call, since Go `sync/atomic` is not especially fast.
+
+This logger will not work well for applications that build format strings dynamically, as in the example below. In that case, performance will be closer to Zap and similar loggers.
 
 ```Go
 {
