@@ -53,15 +53,11 @@ func main() {
 
 # How it works
 
-When an application calls `binlog.Log()`, the logger checks a cache using the offset of the format string in the executable as an index. This step is extremely fast.
-
+When an application calls `binlog.Log()`, the logger checks a cache using the offset of the format string in the executable as an index. This step is fast, like 2 opcodes fast.
 On a cache miss, `Log()` collects the required metadata and stores the format string in the cache, called the L1 cache.
-
 On a cache hit, `Log()` writes the hash of the format string and all variadic arguments to the target io.Writer.
-
 If the string does not come from the executable image, for example if it was allocated on the heap, `Log()` stores it in a map, called the L2 cache.
 The L1 and L2 caches store the data required to decode and format the binary stream later. This includes argument sizes, format verbs, number of arguments, the hash of the format string, and the format string itself.
-
 
 # Install
 
