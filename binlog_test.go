@@ -1139,3 +1139,34 @@ func TestParseLogLineMissingArgs(t *testing.T) {
 		t.Fatalf("expected an error for a missing argument")
 	}
 }
+
+// FR-LOG-3 (D11): signed integers keep their sign through the stream
+func TestSignedRoundTrip(t *testing.T) {
+	cases := []struct {
+		name string
+		log  func(b *Binlog) error
+		want string
+	}{
+		{"int8", func(b *Binlog) error { return b.Log("signed int8 %d", int8(-128)) }, "-128"},
+		{"int16", func(b *Binlog) error { return b.Log("signed int16 %d", int16(-32768)) }, "-32768"},
+		{"int32", func(b *Binlog) error { return b.Log("signed int32 %d", int32(-2147483648)) }, "-2147483648"},
+		{"int64", func(b *Binlog) error { return b.Log("signed int64 %d", int64(-9223372036854775808)) }, "-9223372036854775808"},
+		{"int", func(b *Binlog) error { return b.Log("signed int %d", -1) }, "-1"},
+		{"uint8", func(b *Binlog) error { return b.Log("unsigned uint8 %d", uint8(255)) }, "255"},
+	}
+	for _, c := range cases {
+		var buf bytes.Buffer
+		base, size := GetSelfTextAddressSize()
+		b := Init(&buf, &WriterControlDummy{}, base, size)
+		if err := c.log(b); err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		entry, err := b.DecodeNext(&buf)
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if got := fmt.Sprintf("%d", entry.Args[0]); got != c.want {
+			t.Errorf("%s: decoded %s, want %s", c.name, got, c.want)
+		}
+	}
+}

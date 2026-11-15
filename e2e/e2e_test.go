@@ -26,13 +26,8 @@ const offlineDecoderReady = false
 // knownBroken lists the cases of the sample program that fail today, with the requirement
 // the fix belongs to. Remove an entry in the commit that fixes it.
 var knownBroken = map[string]string{
-	"int-negative":    "FR-LOG-3: decoder returns signed integers as unsigned",
-	"int8-min":        "FR-LOG-3: decoder returns signed integers as unsigned",
-	"int16-min":       "FR-LOG-3: decoder returns signed integers as unsigned",
-	"int32-min":       "FR-LOG-3: decoder returns signed integers as unsigned",
-	"int64-min":       "FR-LOG-3: decoder returns signed integers as unsigned",
-	"string-empty":    "FR-LOG-4: empty string fails to decode",
-	"string-70000":    "FR-LOG-4: string length is 16 bits",
+	"string-empty": "FR-LOG-4: empty string fails to decode",
+	"string-70000": "FR-LOG-4: string length is 16 bits",
 }
 
 var buildModes = map[string][]string{

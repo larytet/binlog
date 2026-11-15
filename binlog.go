@@ -403,33 +403,39 @@ func readStringFromReader(reader io.Reader) (string, error) {
 	return string(slice), nil
 }
 
+// appendArg converts a value read from the stream to the type the handler recorded.
+// Integers arrive as uint64 and are narrowed and sign-extended according to argType.
 func appendArg(args []interface{}, arg interface{}, argType reflect.Type) ([]interface{}, error) {
 	switch value := arg.(type) {
-	case int:
-		return append(args, int(value)), nil
-	case uint:
-		return append(args, uint(value)), nil
-	case int8:
-		return append(args, int8(value)), nil
-	case int16:
-		return append(args, int16(value)), nil
-	case int32:
-		return append(args, int32(value)), nil
-	case int64:
-		return append(args, int64(value)), nil
-	case uint8:
-		return append(args, uint8(value)), nil
-	case uint16:
-		return append(args, uint16(value)), nil
-	case uint32:
-		return append(args, uint32(value)), nil
 	case uint64:
-		return append(args, uint64(value)), nil
+		switch argType.Kind() {
+		case reflect.Int:
+			return append(args, int(value)), nil
+		case reflect.Uint:
+			return append(args, uint(value)), nil
+		case reflect.Int8:
+			return append(args, int8(value)), nil
+		case reflect.Int16:
+			return append(args, int16(value)), nil
+		case reflect.Int32:
+			return append(args, int32(value)), nil
+		case reflect.Int64:
+			return append(args, int64(value)), nil
+		case reflect.Uint8:
+			return append(args, uint8(value)), nil
+		case reflect.Uint16:
+			return append(args, uint16(value)), nil
+		case reflect.Uint32:
+			return append(args, uint32(value)), nil
+		case reflect.Uint64:
+			return append(args, value), nil
+		}
 	case string:
-		return append(args, string(value)), nil
-	default:
-		return nil, fmt.Errorf("Can not handle type %v", argType.Kind())
+		if argType.Kind() == reflect.String {
+			return append(args, value), nil
+		}
 	}
+	return nil, fmt.Errorf("Can not handle type %v", argType.Kind())
 }
 
 func getStringAddress(s string) uint {
