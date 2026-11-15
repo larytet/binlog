@@ -1170,3 +1170,24 @@ func TestSignedRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// FR-LOG-4 (D12): an empty string argument round trips
+func TestEmptyString(t *testing.T) {
+	var buf bytes.Buffer
+	base, size := GetSelfTextAddressSize()
+	b := Init(&buf, &WriterControlDummy{}, base, size)
+	if err := b.Log("empty [%s] end", ""); err != nil {
+		t.Fatalf("%v", err)
+	}
+	entry, err := b.DecodeNext(&buf)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if got := fmt.Sprintf(entry.FmtString, entry.Args...); got != "empty [] end" {
+		t.Fatalf("decoded %q", got)
+	}
+	// FR-DEC-1: an exhausted stream is io.EOF, a cut entry is an error
+	if _, err := b.DecodeNext(&buf); err != io.EOF {
+		t.Fatalf("expected io.EOF at the end of the stream, got %v", err)
+	}
+}

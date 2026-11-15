@@ -26,7 +26,6 @@ const offlineDecoderReady = false
 // knownBroken lists the cases of the sample program that fail today, with the requirement
 // the fix belongs to. Remove an entry in the commit that fixes it.
 var knownBroken = map[string]string{
-	"string-empty": "FR-LOG-4: empty string fails to decode",
 	"string-70000": "FR-LOG-4: string length is 16 bits",
 }
 

@@ -133,6 +133,9 @@ type Binlog struct {
 	statistics           Statistics
 }
 
+// stringLengthSize is the number of bytes of the length prefix of a string argument
+const stringLengthSize = 2
+
 // ALIGNMENT is the size of a pointer in the data section
 const ALIGNMENT uint = 8
 
@@ -352,53 +355,42 @@ func isUnsigned(t reflect.Type) bool {
 	}
 }
 
+// readIntegerFromReader reads a little endian integer of count (1, 2, 4 or 8) bytes.
+// A clean end of the stream (no bytes at all) returns io.EOF.
 func readIntegerFromReader(reader io.Reader, count int) (uint64, error) {
-	slice := make([]byte, count)
-	n, err := reader.Read(slice)
-	if (n > 0) && (n != count) {
-		return 0, fmt.Errorf("Read %d bytes instead of %d, err=%v", n, count, err)
-	} else if n == 0 {
-		return 0, fmt.Errorf("EOF")
+	var slice [8]byte
+	if count < 1 || count > 8 {
+		return 0, fmt.Errorf("Unsupported integer size %d", count)
+	}
+	if _, err := io.ReadFull(reader, slice[:count]); err != nil {
+		return 0, err
 	}
 	switch count {
 	case 1:
-		var value uint8
-		binary.Read(bytes.NewBuffer(slice[:]), binary.LittleEndian, &value)
-		return uint64(value), nil
+		return uint64(slice[0]), nil
 	case 2:
-		var value uint16
-		binary.Read(bytes.NewBuffer(slice[:]), binary.LittleEndian, &value)
-		return uint64(value), nil
+		return uint64(binary.LittleEndian.Uint16(slice[:])), nil
 	case 4:
-		var value uint32
-		binary.Read(bytes.NewBuffer(slice[:]), binary.LittleEndian, &value)
-		return uint64(value), nil
-	default:
-		var value uint64
-		binary.Read(bytes.NewBuffer(slice[:]), binary.LittleEndian, &value)
-		return uint64(value), nil
+		return uint64(binary.LittleEndian.Uint32(slice[:])), nil
+	case 8:
+		return binary.LittleEndian.Uint64(slice[:]), nil
 	}
+	return 0, fmt.Errorf("Unsupported integer size %d", count)
 }
 
+// readStringFromReader reads a length (stringLengthSize bytes) and the string.
+// An empty string is valid: it has a length and no bytes.
 func readStringFromReader(reader io.Reader) (string, error) {
-	// Read 2 bytes of the size of the string
-	count := 2
-	slice := make([]byte, count)
-	n, err := reader.Read(slice)
-	if (n > 0) && (n != count) {
-		return "", fmt.Errorf("Read %d bytes instead of %d, err=%v", n, count, err)
-	} else if n == 0 {
-		return "", fmt.Errorf("EOF")
+	length, err := readIntegerFromReader(reader, stringLengthSize)
+	if err != nil {
+		return "", err
 	}
-	var value uint16
-	binary.Read(bytes.NewBuffer(slice[:]), binary.LittleEndian, &value)
-	count = int(value)
-	slice = make([]byte, count)
-	n, err = reader.Read(slice)
-	if (n > 0) && (n != count) {
-		return "", fmt.Errorf("Read %d bytes instead of %d, err=%v", n, count, err)
-	} else if n == 0 {
-		return "", fmt.Errorf("EOF")
+	slice := make([]byte, length)
+	if _, err := io.ReadFull(reader, slice); err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		return "", err
 	}
 	return string(slice), nil
 }
@@ -776,12 +768,12 @@ func (w *writerString) getSize() int {
 	return 0
 }
 
-// Write 16 bits length of the string followed by the string itself
+// Write the length (stringLengthSize bytes) of the string followed by the string itself
 // TODO: if the string is const I need only it's hash
 func (w *writerString) write(ioWriter io.Writer, data unsafe.Pointer) error {
 	// I am doing something which https://golang.org/pkg/unsafe/ explicitly forbids
 	var hdr = (*reflect.StringHeader)(data)
-	writer := &writerByteArray{2}
+	writer := &writerByteArray{stringLengthSize}
 	if err := writer.write(ioWriter, unsafe.Pointer(&(hdr.Len))); err != nil {
 		return err
 	}
