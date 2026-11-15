@@ -1191,3 +1191,21 @@ func TestEmptyString(t *testing.T) {
 		t.Fatalf("expected io.EOF at the end of the stream, got %v", err)
 	}
 }
+
+// FR-LOG-4 (D13): a string longer than 65535 bytes is not truncated
+func TestLongString(t *testing.T) {
+	var buf bytes.Buffer
+	base, size := GetSelfTextAddressSize()
+	b := Init(&buf, &WriterControlDummy{}, base, size)
+	long := strings.Repeat("z", 70000)
+	if err := b.Log("long [%s]", long); err != nil {
+		t.Fatalf("%v", err)
+	}
+	entry, err := b.DecodeNext(&buf)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if got := fmt.Sprintf(entry.FmtString, entry.Args...); got != "long ["+long+"]" {
+		t.Fatalf("decoded %d bytes", len(got))
+	}
+}

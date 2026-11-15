@@ -68,12 +68,12 @@ These drive the planned work.
 | D6 | `Fifo.WriteIntegral` writes one byte and ignores `count`. | The FIFO cannot hold 2, 4 or 8 byte values. | 6 |
 | D7 | The stream flags are global variables and the stream is unversioned. | A stream cannot be decoded without knowing the writer's flags. | 4 |
 | D8 | There is no `go.mod`, and `ast` imports `"binlog"`. | `go test ./...` does not run. | 3 |
-| D10 | `parseLogLine` sees `%%` and does `continue` without consuming the second `%`, so the next rune is read as a verb. | `Log("100%% sure %d", 7)` returns an error. | 8.1 |
-| D11 | `DecodeNext` reads every integer as `uint64`, and `appendArg` switches on that value's type, not on the handler's `argType`. | `int8(-128)` decodes as 128 and `int(-10)` as 18446744073709551606. | 8.1 |
-| D12 | `readStringFromReader` and `readIntegerFromReader` treat a zero-byte read as EOF. | An empty string argument fails to decode with "EOF". | 8.1 |
-| D13 | The string length prefix is 16 bits. | A string of 70000 bytes is written truncated and decodes to the wrong text. | 8.1 |
+| D10 | `parseLogLine` sees `%%` and does `continue` without consuming the second `%`, so the next rune is read as a verb. | `Log("100%% sure %d", 7)` returns an error. | fixed |
+| D11 | `DecodeNext` reads every integer as `uint64`, and `appendArg` switches on that value's type, not on the handler's `argType`. | `int8(-128)` decodes as 128 and `int(-10)` as 18446744073709551606. | fixed |
+| D12 | `readStringFromReader` and `readIntegerFromReader` treat a zero-byte read as EOF. | An empty string argument fails to decode with "EOF". | fixed |
+| D13 | The string length prefix is 16 bits. | A string of 70000 bytes is written truncated and decodes to the wrong text. | fixed |
 | D14 | `moduledata.GetModules` dereferences a nil pointer on executables built by Go 1.27 (SIGSEGV, not recoverable). | `GetIndexTable` cannot be used on a current executable at all. | 5 |
-| D15 | `parseLogLine` indexes `args[argIndex]` for each verb. | Fewer arguments than verbs panics (found by reading, not yet reproduced). | 8.1 |
+| D15 | `parseLogLine` indexes `args[argIndex]` for each verb. | Fewer arguments than verbs panics (found by reading, not yet reproduced). | fixed |
 | D9 | `Handler.Args.args` is indexed by `args` length checked at call time only. | Error on mismatch, but only after the handler is cached from a bad first call. | 4 |
 
 ## 3. Build and packaging (NFR-BUILD-1, NFR-PORT-1)
@@ -104,7 +104,7 @@ Argument encodings, added to the existing ones:
 
 | Type | Verbs | Encoding |
 |---|---|---|
-| string length | `%s` | 4 bytes (was 2), then the bytes |
+| string length | `%s` | 4 bytes (done; was 2), then the bytes |
 | `float32` | `%f %e %g` | 4 bytes, IEEE 754 bits |
 | `float64` | `%f %e %g` | 8 bytes, IEEE 754 bits |
 | `rune` / `int32` | `%c` | 4 bytes |

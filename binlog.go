@@ -134,7 +134,7 @@ type Binlog struct {
 }
 
 // stringLengthSize is the number of bytes of the length prefix of a string argument
-const stringLengthSize = 2
+const stringLengthSize = 4
 
 // ALIGNMENT is the size of a pointer in the data section
 const ALIGNMENT uint = 8

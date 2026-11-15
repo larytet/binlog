@@ -154,8 +154,8 @@ a reason, and none fails.
 ### 4.1 State after task 4
 
 `go test ./e2e/...` runs the sample program in 2 build modes x 16 flag combinations x 26 cases.
-Known failures are listed in `knownBroken` in `e2e/e2e_test.go`, each with its requirement:
-FR-LOG-11 (`%%`), FR-LOG-3 (signed decode), FR-LOG-4 (empty and long strings). The offline
+Known failures are listed in `knownBroken` in `e2e/e2e_test.go`, each with its requirement.
+The list is empty since D10 to D13 were fixed. The offline
 cases (TC-DEC-*) skip behind `offlineDecoderReady`, because the stub returns nothing and its
 dependency crashes (D14). TC-DEC-3 to 8 and TC-FIFO-9 are placeholders until their features.
 
