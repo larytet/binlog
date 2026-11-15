@@ -68,6 +68,12 @@ These drive the planned work.
 | D6 | `Fifo.WriteIntegral` writes one byte and ignores `count`. | The FIFO cannot hold 2, 4 or 8 byte values. | 6 |
 | D7 | The stream flags are global variables and the stream is unversioned. | A stream cannot be decoded without knowing the writer's flags. | 4 |
 | D8 | There is no `go.mod`, and `ast` imports `"binlog"`. | `go test ./...` does not run. | 3 |
+| D10 | `parseLogLine` sees `%%` and does `continue` without consuming the second `%`, so the next rune is read as a verb. | `Log("100%% sure %d", 7)` returns an error. | 8.1 |
+| D11 | `DecodeNext` reads every integer as `uint64`, and `appendArg` switches on that value's type, not on the handler's `argType`. | `int8(-128)` decodes as 128 and `int(-10)` as 18446744073709551606. | 8.1 |
+| D12 | `readStringFromReader` and `readIntegerFromReader` treat a zero-byte read as EOF. | An empty string argument fails to decode with "EOF". | 8.1 |
+| D13 | The string length prefix is 16 bits. | A string of 70000 bytes is written truncated and decodes to the wrong text. | 8.1 |
+| D14 | `moduledata.GetModules` dereferences a nil pointer on executables built by Go 1.27 (SIGSEGV, not recoverable). | `GetIndexTable` cannot be used on a current executable at all. | 5 |
+| D15 | `parseLogLine` indexes `args[argIndex]` for each verb. | Fewer arguments than verbs panics (found by reading, not yet reproduced). | 8.1 |
 | D9 | `Handler.Args.args` is indexed by `args` length checked at call time only. | Error on mismatch, but only after the handler is cached from a bad first call. | 4 |
 
 ## 3. Build and packaging (NFR-BUILD-1, NFR-PORT-1)
@@ -98,6 +104,7 @@ Argument encodings, added to the existing ones:
 
 | Type | Verbs | Encoding |
 |---|---|---|
+| string length | `%s` | 4 bytes (was 2), then the bytes |
 | `float32` | `%f %e %g` | 4 bytes, IEEE 754 bits |
 | `float64` | `%f %e %g` | 8 bytes, IEEE 754 bits |
 | `rune` / `int32` | `%c` | 4 bytes |
@@ -105,6 +112,11 @@ Argument encodings, added to the existing ones:
 ## 5. Offline index table (FR-DEC-2 to FR-DEC-8, D2 to D5)
 
 ### 5.1 Pipeline
+
+The module list comes from `debug/buildinfo` and the executable's DWARF or `runtime.pclntab`
+file table (`debug/gosym`), read with the standard library. `moduledata.GetModules` is no longer
+used (D14). If the executable has no file table (stripped), the decoder asks for the source
+root with a flag instead of failing silently.
 
 ```
 executable ──► moduledata.GetModules ──► Go files ──► packages.Load (go/types)
@@ -197,7 +209,17 @@ FR-CONC-3 is not designed here. It needs a decision on question 4 of the require
 
 ## 8. Smaller changes
 
-### 8.1 Error handling (D1)
+### 8.1 Correctness fixes (D1, D10 to D13, D15)
+
+- D10: after `%`, if the next rune is `%`, consume it.
+- D11: make `appendArg` convert by the handler's `argType`, so signed kinds are sign-extended
+  from their width.
+- D12: allow zero-length reads in the string path; treat only a zero-byte read of the 4-byte
+  hash at the start of an entry as end of stream.
+- D13: widen the string length to 32 bits in stream format v1 (section 4).
+- D15: check `argIndex < len(args)` and return an error.
+
+### 8.1.1 Error handling (D1)
 
 Fix the shadowed `err` in `Log()`. Return the first write error and still call
 `FrameEnd`, so that a shared writer is never left mid-frame.
@@ -236,7 +258,7 @@ the timestamp, index and source position when present.
 ## 11. Implementation order
 
 1. Build and packaging (3), because every later step needs `go test ./...`.
-2. Error handling fix (8.1).
+2. Correctness fixes and error handling (8.1), which also turn the `knownBroken` e2e cases green.
 3. Float and char (8.2) with the stream header (4).
 4. Offline index table (5) and the decoder command (8.3).
 5. FIFO phase 1 (6).

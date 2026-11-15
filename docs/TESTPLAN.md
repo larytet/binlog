@@ -151,14 +151,22 @@ Each case in section 3 marked E gets a test function named after its ID, for exa
 Run with `go test ./e2e/...`. Expected outcome after task 4: every case passes or skips with
 a reason, and none fails.
 
+### 4.1 State after task 4
+
+`go test ./e2e/...` runs the sample program in 2 build modes x 16 flag combinations x 26 cases.
+Known failures are listed in `knownBroken` in `e2e/e2e_test.go`, each with its requirement:
+FR-LOG-11 (`%%`), FR-LOG-3 (signed decode), FR-LOG-4 (empty and long strings). The offline
+cases (TC-DEC-*) skip behind `offlineDecoderReady`, because the stub returns nothing and its
+dependency crashes (D14). TC-DEC-3 to 8 and TC-FIFO-9 are placeholders until their features.
+
 ## 5. Task map
 
 | Task | Content | Cases that go green |
 |---|---|---|
-| F1 | `go.mod`, build scripts | TC-BLD-* |
-| F2 | Error handling, strict verbs | TC-LOG-4, 8, 9, 10, TC-PERF-3 |
+| F1 | `go.mod`, build scripts (done early: the e2e suite needs it) | TC-BLD-* |
+| F2 | Correctness fixes (D1, D10 to D13, D15), strict verbs | The `knownBroken` e2e cases, TC-LOG-4, 8, 9, 10, TC-PERF-3 |
 | F3 | Float, char, stream header | TC-LOG-6, 7, TC-FMT-1 to 4 |
-| F4 | Offline index table | TC-DEC-1 to 7, 9 |
+| F4 | Offline index table (set `offlineDecoderReady` in `e2e/e2e_test.go`) | TC-DEC-1 to 7, 9 |
 | F5 | `binlogdump` | TC-DEC-8 |
 | F6 | FIFO phase 1 | TC-FIFO-1 to 7, 9, TC-PERF-4, TC-SAFE-1, TC-QUAL-1 |
 | F7 | FIFO phase 2 | TC-FIFO-8 |
