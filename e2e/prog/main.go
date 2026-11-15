@@ -90,6 +90,20 @@ func main() {
 		return logger.Log("mix %d %d %d %d", int8(1), int16(2), int32(3), int64(4))
 	})
 
+	logCase("float64-pi", "f64 3.141592653589793", func() error { return logger.Log("f64 %g", math.Pi) })
+	logCase("float32", "f32 1.500000", func() error { return logger.Log("f32 %f", float32(1.5)) })
+	logCase("float64-exp", "f64e 1.000000e+100", func() error { return logger.Log("f64e %e", 1e100) })
+	logCase("float64-neg-zero", "nz -0", func() error { return logger.Log("nz %g", math.Copysign(0, -1)) })
+	logCase("float64-nan", "nan NaN", func() error { return logger.Log("nan %g", math.NaN()) })
+	logCase("float64-inf", "inf +Inf", func() error { return logger.Log("inf %g", math.Inf(1)) })
+	logCase("float64-max", fmt.Sprintf("fmax %g", math.MaxFloat64), func() error { return logger.Log("fmax %g", math.MaxFloat64) })
+	logCase("float32-smallest", fmt.Sprintf("fmin %g", float32(math.SmallestNonzeroFloat32)), func() error {
+		return logger.Log("fmin %g", float32(math.SmallestNonzeroFloat32))
+	})
+	logCase("char-ascii", "chr x", func() error { return logger.Log("chr %c", 'x') })
+	logCase("char-multibyte", "chr2 世", func() error { return logger.Log("chr2 %c", '世') })
+	logCase("char-max", fmt.Sprintf("chr3 %c", rune(0x10FFFF)), func() error { return logger.Log("chr3 %c", rune(0x10FFFF)) })
+
 	logCase("string-empty", "str [] end", func() error { return logger.Log("str [%s] end", "") })
 	logCase("string-short", "str2 [abc] end", func() error { return logger.Log("str2 [%s] end", "abc") })
 	nul := "a\x00b\xffc"

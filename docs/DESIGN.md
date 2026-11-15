@@ -231,7 +231,7 @@ FR-CONC-3 is not designed here. It needs a decision on question 4 of the require
 Fix the shadowed `err` in `Log()`. Return the first write error and still call
 `FrameEnd`, so that a shared writer is never left mid-frame.
 
-### 8.2 Float and char (FR-LOG-7, FR-LOG-8)
+### 8.2 Float and char (FR-LOG-7, FR-LOG-8) - done
 
 Extend `parseLogLine` to accept `f e g c`, reuse `writerByteArray{count: 4|8}` for the raw
 float bits (it already writes integers of those widths), and extend `DecodeNext` and

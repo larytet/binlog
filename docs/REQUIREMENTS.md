@@ -38,9 +38,9 @@ Out of scope: a network log transport, log rotation, and an interactive viewer.
 | FR-LOG-4 | M | Done | String arguments are written length-prefixed. Strings of any length, including empty, round trip. The length prefix is 32 bits. |
 | FR-LOG-5 | M | Done | `WriterControl.FrameStart/FrameEnd` is called around every entry so that writers can be shared. |
 | FR-LOG-6 | S | Done | Optional per-entry fields: running index, string index, file hash and line, timestamp (`SEND_LOG_INDEX`, `SEND_STRING_INDEX`, `ADD_SOURCE_LINE`, `ADD_TIMESTAMP`). |
-| FR-LOG-7 | M | Open | `float32` and `float64` arguments (`%f`, `%e`, `%g`) are supported. |
-| FR-LOG-8 | S | Open | `char` / rune (`%c`) is supported. |
-| FR-LOG-9 | M | Partial | An unsupported verb (`%v`, `%T`, `%p`) or argument type returns an error. It never corrupts the stream. |
+| FR-LOG-7 | M | Done | `float32` and `float64` arguments (`%f`, `%e`, `%g`) are supported. |
+| FR-LOG-8 | S | Done | `char` / rune (`%c`) is supported. |
+| FR-LOG-9 | M | Done | An unsupported verb (`%v`, `%T`, `%p`) or argument type returns an error. It never corrupts the stream. |
 | FR-LOG-11 | M | Done | `%%` in a format string is a literal percent sign and consumes no argument (D10). |
 | FR-LOG-10 | S | Done | A format string not in the image is served from the L2 cache, with correct output. |
 

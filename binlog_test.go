@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"math/rand"
 	"os"
 	"reflect"
@@ -1318,5 +1319,81 @@ func TestL1SlotCollision(t *testing.T) {
 				t.Fatalf("round %d: decoded %q, want %q", round, got, want)
 			}
 		}
+	}
+}
+
+// TC-LOG-6 (FR-LOG-7): floats round trip bit for bit
+func TestFloatRoundTrip(t *testing.T) {
+	var buf bytes.Buffer
+	base, size := GetSelfTextAddressSize()
+	b := Init(&buf, &WriterControlDummy{}, base, size)
+	f64s := []float64{0, math.Copysign(0, -1), 1.5, -2.25, math.Pi, math.MaxFloat64, math.SmallestNonzeroFloat64, math.Inf(1), math.Inf(-1), math.NaN()}
+	for _, v := range f64s {
+		buf.Reset()
+		if err := b.Log("f64 %g", v); err != nil {
+			t.Fatalf("%v", err)
+		}
+		entry, err := b.DecodeNext(&buf)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		got, ok := entry.Args[0].(float64)
+		if !ok || math.Float64bits(got) != math.Float64bits(v) {
+			t.Errorf("float64 %v decoded as %v (%T)", v, entry.Args[0], entry.Args[0])
+		}
+	}
+	f32s := []float32{0, float32(math.Copysign(0, -1)), 1.5, math.MaxFloat32, math.SmallestNonzeroFloat32, float32(math.Inf(-1)), float32(math.NaN())}
+	for _, v := range f32s {
+		buf.Reset()
+		if err := b.Log("f32 %f", v); err != nil {
+			t.Fatalf("%v", err)
+		}
+		entry, err := b.DecodeNext(&buf)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		got, ok := entry.Args[0].(float32)
+		if !ok || math.Float32bits(got) != math.Float32bits(v) {
+			t.Errorf("float32 %v decoded as %v (%T)", v, entry.Args[0], entry.Args[0])
+		}
+	}
+}
+
+// TC-LOG-7 (FR-LOG-8): %c with runes
+func TestCharRoundTrip(t *testing.T) {
+	var buf bytes.Buffer
+	base, size := GetSelfTextAddressSize()
+	b := Init(&buf, &WriterControlDummy{}, base, size)
+	for _, r := range []rune{'a', '世', 0x10FFFF} {
+		buf.Reset()
+		if err := b.Log("char %c", r); err != nil {
+			t.Fatalf("%v", err)
+		}
+		entry, err := b.DecodeNext(&buf)
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+		if got, want := fmt.Sprintf(entry.FmtString, entry.Args...), fmt.Sprintf("char %c", r); got != want {
+			t.Errorf("decoded %q, want %q", got, want)
+		}
+	}
+}
+
+// FR-LOG-9: a verb that does not fit the argument type is an error and writes nothing
+func TestVerbTypeMismatch(t *testing.T) {
+	var buf bytes.Buffer
+	base, size := GetSelfTextAddressSize()
+	b := Init(&buf, &WriterControlDummy{}, base, size)
+	if err := b.Log("mismatch %d", 1.5); err == nil {
+		t.Errorf("%%d with a float must fail")
+	}
+	if err := b.Log("mismatch2 %f", 1); err == nil {
+		t.Errorf("%%f with an int must fail")
+	}
+	if err := b.Log("mismatch3 %s", 1); err == nil {
+		t.Errorf("%%s with an int must fail")
+	}
+	if buf.Len() != 0 {
+		t.Errorf("%d bytes written", buf.Len())
 	}
 }

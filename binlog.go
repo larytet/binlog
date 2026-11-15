@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"reflect"
 	"runtime"
@@ -313,6 +314,16 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 		if isIntegral(argType) {
 			count := hArg.writer.getSize() // size of the integer I pushed into the binary stream
 			value, err = readIntegerFromReader(reader, count)
+		} else if isFloat(argType) {
+			var bits uint64
+			bits, err = readIntegerFromReader(reader, hArg.writer.getSize())
+			if err == nil {
+				if argType.Kind() == reflect.Float32 {
+					value = math.Float32frombits(uint32(bits))
+				} else {
+					value = math.Float64frombits(bits)
+				}
+			}
 		} else if hArg.decodeArg.argKind == reflect.String {
 			value, err = readStringFromReader(reader)
 		} else {
@@ -350,6 +361,10 @@ func isIntegral(t reflect.Type) bool {
 	default:
 		return false
 	}
+}
+
+func isFloat(t reflect.Type) bool {
+	return t.Kind() == reflect.Float32 || t.Kind() == reflect.Float64
 }
 
 func isUnsigned(t reflect.Type) bool {
@@ -428,6 +443,8 @@ func appendArg(args []interface{}, arg interface{}, argType reflect.Type) ([]int
 		case reflect.Uint64:
 			return append(args, value), nil
 		}
+	case float32, float64:
+		return append(args, value), nil
 	case string:
 		if argType.Kind() == reflect.String {
 			return append(args, value), nil
@@ -678,10 +695,23 @@ func parseLogLine(gold string, args []interface{}) ([]*HandlerArg, error) {
 		count := int(argType.Size()) // number of bytes in the argument
 		switch r {
 		case 'x', 'd', 'i', 'c':
+			if !isIntegral(argType) {
+				return nil, fmt.Errorf("Can not handle '%%%c' in %s: argument #%d is %v, not an integer", r, gold, argIndex+1, argKind)
+			}
+			writer := &writerByteArray{count: count}
+			hArg := &HandlerArg{writer: writer, fmtVerb: r, decodeArg: DecodeArg{argType: argType, argKind: argKind}}
+			hArgs = append(hArgs, hArg)
+		case 'f', 'e', 'g':
+			if !isFloat(argType) {
+				return nil, fmt.Errorf("Can not handle '%%%c' in %s: argument #%d is %v, not a float", r, gold, argIndex+1, argKind)
+			}
 			writer := &writerByteArray{count: count}
 			hArg := &HandlerArg{writer: writer, fmtVerb: r, decodeArg: DecodeArg{argType: argType, argKind: argKind}}
 			hArgs = append(hArgs, hArg)
 		case 's':
+			if argKind != reflect.String {
+				return nil, fmt.Errorf("Can not handle '%%s' in %s: argument #%d is %v, not a string", gold, argIndex+1, argKind)
+			}
 			writer := &writerString{}
 			hArg := &HandlerArg{writer: writer, fmtVerb: r, decodeArg: DecodeArg{argType: argType, argKind: argKind}}
 			hArgs = append(hArgs, hArg)
