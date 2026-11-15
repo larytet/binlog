@@ -65,7 +65,7 @@ These drive the planned work.
 | D3 | File hash and line are 16 bits each. | Collisions between files, and no support for files over 65535 lines. | fixed |
 | D4 | `ast.GetIndexTable` returns `nil, nil, nil`. | No offline decoding. | fixed |
 | D5 | `ast` records `reflect.TypeOf(astNode)`, which is the AST node type. | The recorded types are meaningless. | fixed |
-| D6 | `Fifo.WriteIntegral` writes one byte and ignores `count`. | The FIFO cannot hold 2, 4 or 8 byte values. | 6 |
+| D6 | `Fifo.WriteIntegral` writes one byte and ignores `count`. | The FIFO cannot hold 2, 4 or 8 byte values. | fixed |
 | D7 | The stream flags are global variables and the stream is unversioned. | A stream cannot be decoded without knowing the writer's flags. | fixed (`WriteHeader`, `ReadHeader`, `DecodeNextFlags`) |
 | D8 | There is no `go.mod`, and `ast` imports `"binlog"`. | `go test ./...` does not run. | 3 |
 | D10 | `parseLogLine` sees `%%` and does `continue` without consuming the second `%`, so the next rune is read as a verb. | `Log("100%% sure %d", 7)` returns an error. | fixed |
@@ -182,7 +182,13 @@ The existing signature stays so that callers keep working. The function returns 
 when the executable cannot be read, and returns a table plus a list of diagnostics when
 some calls are skipped.
 
-## 6. FIFO (FR-FIFO-1 to FR-FIFO-6, D6)
+## 6. FIFO (FR-FIFO-1 to FR-FIFO-6, D6) - phase 1 implemented
+
+Implemented in `io/io.go`. Differences from the plan: the ring size is a power of two (a mask instead of a
+division); the 32 bit header packs the state and a 24 bit length and is the only synchronisation; positions are
+monotonic 64 bit byte counters; the consumer stops at `head == tail` and never reads the memory at the tail (it
+holds stale bytes of an earlier lap); `Fifo` is also an `io.Writer` and an `io.Reader`; `io.Framer` makes an
+entry one block through the logger's `WriterControl`. Write cost is about 60 ns, see `docs/BENCH.md`.
 
 ### 6.1 Layout
 

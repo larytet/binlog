@@ -9,6 +9,8 @@ package e2e
 import (
 	"bytes"
 	"fmt"
+	blio "github.com/larytet/binlog/io"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -224,8 +226,6 @@ func TestTC_DEC_9_BadExecutable(t *testing.T) {
 
 // Cases below need sample programs that are written together with the feature.
 // They are placeholders that keep the test plan visible in `go test -v`.
-
-func TestTC_FIFO_9_LoggerOverFifo(t *testing.T) { t.Skip("FR-CONC-2: write with the FIFO (F6)") }
 
 // marks returns the line of every "// MARK: name" comment of the progdec source
 func marks(t *testing.T) (file string, lines map[string]int) {
@@ -473,4 +473,55 @@ func TestTC_DEC_8_BinlogdumpHeaderAndErrors(t *testing.T) {
 	if out, err := exec.Command(dump).CombinedOutput(); err == nil || !strings.Contains(string(out), "usage") {
 		t.Errorf("no arguments: %v %s", err, out)
 	}
+}
+
+// TC-FIFO-9 (FR-CONC-2): a logger writes through a Framer into a Fifo while another goroutine
+// decodes. Every entry arrives whole, in order, none is lost (run with -race).
+func TestTC_FIFO_9_LoggerOverFifo(t *testing.T) {
+	const entries = 20000
+	fifo := blio.New(1 << 14)
+	framer := blio.NewFramer(fifo)
+	base, size := binlog.GetSelfTextAddressSize()
+	logger := binlog.Init(framer, framer, base, size)
+
+	// warm up: the handlers are created now, so the consumer only reads the table afterwards
+	logger.Log("fifo %d %s", 0, "warm")
+	table, files := logger.GetIndexTable()
+	if _, err := binlog.DecodeNextFlags(fifo, table, files, 0); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 1; i <= entries; {
+			if err := logger.Log("fifo %d %s", i, "payload"); err != nil {
+				t.Errorf("Log: %v", err)
+				return
+			}
+			if fifo.Dropped() != 0 {
+				// full: wait for the consumer and log the same entry again
+				for fifo.Len() > fifo.Size()/2 {
+				}
+				fifo.ResetDropped()
+				continue
+			}
+			i++
+		}
+	}()
+	for next := 1; next <= entries; {
+		entry, err := binlog.DecodeNextFlags(fifo, table, files, 0)
+		if err == io.EOF {
+			continue // nothing committed yet
+		}
+		if err != nil {
+			t.Fatalf("entry %d: %v", next, err)
+		}
+		if got, want := fmt.Sprintf(entry.FmtString, entry.Args...), fmt.Sprintf("fifo %d payload", next); got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+		next++
+	}
+	wg.Wait()
 }

@@ -1361,3 +1361,28 @@ func TestVerbTypeMismatch(t *testing.T) {
 		t.Errorf("%d bytes written", buf.Len())
 	}
 }
+
+// TC-PERF-3 (NFR-PERF-3): no allocation on an L1 hit with 0, 1 and 3 integer arguments
+func TestAllocsPerLog(t *testing.T) {
+	var buf bytes.Buffer
+	base, size := GetSelfTextAddressSize()
+	b := Init(&buf, &nullControl{}, base, size)
+	b.config.IOWriter = io.Discard
+	b.Log("allocs 0")
+	b.Log("allocs 1 %d", 1)
+	b.Log("allocs 3 %d %d %d", 1, 2, 3)
+	for name, do := range map[string]func(){
+		"0 args": func() { b.Log("allocs 0") },
+		"1 arg":  func() { b.Log("allocs 1 %d", 1) },
+		"3 args": func() { b.Log("allocs 3 %d %d %d", 1, 2, 3) },
+	} {
+		if n := testing.AllocsPerRun(100, do); n != 0 {
+			t.Errorf("%s: %v allocations per call", name, n)
+		}
+	}
+}
+
+type nullControl struct{}
+
+func (*nullControl) FrameStart(io.Writer) {}
+func (*nullControl) FrameEnd(io.Writer)   {}

@@ -155,8 +155,7 @@ a reason, and none fails.
 
 `go test ./e2e/...` runs the sample program in 2 build modes x 16 flag combinations x 26 cases.
 Known failures are listed in `knownBroken` in `e2e/e2e_test.go`, each with its requirement.
-The list is empty since D10 to D13 were fixed. TC-DEC-1 to 7 and 9 are implemented (F4 done). TC-DEC-8 and TC-FIFO-9 are placeholders until
-their features.
+The list is empty since D10 to D13 were fixed. TC-DEC-1 to 9 and TC-FIFO-9 are implemented (F4, F5, F6 done). TC-FIFO-8 waits for F7.
 
 ## 5. Task map
 
