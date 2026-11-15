@@ -1,8 +1,8 @@
 package ast
 
 import (
-	"binlog"
 	"github.com/larytet-go/moduledata"
+	"github.com/larytet/binlog"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -74,7 +74,7 @@ func (v astVisitor) Visit(astNode ast.Node) ast.Visitor {
 		}
 		args = astCallExpr.Args
 	}
-	if (packageName != "binlog") || (functionName != "Log") {
+	if (packageName != "github.com/larytet/binlog") || (functionName != "Log") {
 		return v
 	}
 	if len(args) < 1 {

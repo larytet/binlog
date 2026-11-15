@@ -1,12 +1,9 @@
+#!/bin/bash
+# Runs unit tests with coverage and the benchmarks of every package.
+# Try: go tool pprof profile-binlog.out ; go tool cover -html=coverage-binlog.out
+cd "$(dirname "$0")"
 set -e
-wd=`dirname $0`
-
-folders=( $wd/ast $wd/io $wd )
-for folder in ${folders[*]}
+for pkg in ./ast ./io .
 do
-	go test -v -cover  -cpuprofile profile-binlog.out -bench=. -coverprofile=coverage-binlog.out $folder 
+	go test -v -cover -cpuprofile profile-binlog.out -bench=. -coverprofile=coverage-binlog.out "$pkg"
 done
-
-# Try go tool pprof profile-binlog.out 
-# and go tool cover -html=coverage-binlog.out
-
