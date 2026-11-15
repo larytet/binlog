@@ -224,6 +224,78 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 	return writeErr
 }
 
+// eofIsUnexpected turns io.EOF into io.ErrUnexpectedEOF: the stream ended inside an entry
+type eofIsUnexpected struct{ io.Reader }
+
+func (r *eofIsUnexpected) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if err == io.EOF && n == 0 {
+		err = io.ErrUnexpectedEOF
+	}
+	return n, err
+}
+
+// Flags tell which optional fields every entry of a stream has
+type Flags uint16
+
+const (
+	FlagStringIndex Flags = 1 << iota // SEND_STRING_INDEX
+	FlagSourceLine                    // ADD_SOURCE_LINE
+	FlagLogIndex                      // SEND_LOG_INDEX
+	FlagTimestamp                     // ADD_TIMESTAMP
+)
+
+// CurrentFlags returns the flags that match the package level switches
+func CurrentFlags() Flags {
+	var f Flags
+	if SEND_STRING_INDEX {
+		f |= FlagStringIndex
+	}
+	if ADD_SOURCE_LINE {
+		f |= FlagSourceLine
+	}
+	if SEND_LOG_INDEX {
+		f |= FlagLogIndex
+	}
+	if ADD_TIMESTAMP {
+		f |= FlagTimestamp
+	}
+	return f
+}
+
+// StreamMagic starts every stream that has a header. The last byte is the format version.
+const StreamMagic = "BLG1"
+
+// HeaderSize is the size in bytes of the stream header: magic(4) flags(2) reserved(2)
+const HeaderSize = 8
+
+// WriteHeader writes the stream header with the current flags. Call it once, before
+// the first Log(), when the stream is a file or a connection. A shared writer
+// must get one header from its owner, not one per logger.
+func (b *Binlog) WriteHeader() error {
+	var header [HeaderSize]byte
+	copy(header[:], StreamMagic)
+	binary.LittleEndian.PutUint16(header[4:], uint16(CurrentFlags()))
+	_, err := b.config.IOWriter.Write(header[:])
+	return err
+}
+
+// ReadHeader reads and validates the stream header and returns the flags of the stream
+func ReadHeader(reader io.Reader) (Flags, error) {
+	var header [HeaderSize]byte
+	if _, err := io.ReadFull(reader, header[:]); err != nil {
+		return 0, fmt.Errorf("Failed to read the stream header: %v", err)
+	}
+	if string(header[:4]) != StreamMagic {
+		return 0, fmt.Errorf("Bad stream header %q, expected %q: unknown format or version", header[:4], StreamMagic)
+	}
+	flags := Flags(binary.LittleEndian.Uint16(header[4:]))
+	if flags >= FlagTimestamp<<1 {
+		return 0, fmt.Errorf("Unknown flags %#x in the stream header", uint16(flags))
+	}
+	return flags, nil
+}
+
 type LogEntry struct {
 	Filename   string
 	LineNumber int
@@ -250,10 +322,18 @@ func (b *Binlog) DecodeNext(reader io.Reader) (*LogEntry, error) {
 // 2. find the format string and arguments in the L1 or L2 cache
 // 3. Read arguments from the binary stream
 func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[uint16]string) (*LogEntry, error) {
+	return DecodeNextFlags(reader, indexTable, filenames, CurrentFlags())
+}
+
+// DecodeNextFlags is DecodeNext for a stream whose optional fields are described by flags,
+// usually the flags returned by ReadHeader
+func DecodeNextFlags(reader io.Reader, indexTable map[uint32]*Handler, filenames map[uint16]string, flags Flags) (*LogEntry, error) {
 	var logEntry = &LogEntry{}
 	var h *Handler
 	// Read format string hash
 	if hashUint, err := readIntegerFromReader(reader, 4); err == nil {
+		// From here on the end of the stream means a truncated entry
+		reader = &eofIsUnexpected{reader}
 		var ok bool
 		if h, ok = indexTable[uint32(hashUint)]; !ok {
 			return nil, fmt.Errorf("Failed to find format string hash %x", hashUint)
@@ -262,7 +342,7 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 		return nil, err
 	}
 
-	if SEND_STRING_INDEX {
+	if flags&FlagStringIndex != 0 {
 		// Read format string index
 		if index, err := readIntegerFromReader(reader, 4); err == nil {
 			if uint32(index) != h.IndexUint {
@@ -272,7 +352,7 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 			return nil, fmt.Errorf("Failed to read format string index err=%v", err)
 		}
 	}
-	if ADD_SOURCE_LINE {
+	if flags&FlagSourceLine != 0 {
 		// Read filename hash and source line number from the binary stream
 		if filenameHash, err := readIntegerFromReader(reader, 2); err == nil {
 			filename, ok := filenames[uint16(filenameHash)]
@@ -287,7 +367,7 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 			return nil, fmt.Errorf("Failed to read source file linenumber err=%v", err)
 		}
 	}
-	if SEND_LOG_INDEX {
+	if flags&FlagLogIndex != 0 {
 		// Read log index - running counter of logs
 		if logEntryIndex, err := readIntegerFromReader(reader, 8); err == nil {
 			logEntry.Index = logEntryIndex
@@ -295,7 +375,7 @@ func DecodeNext(reader io.Reader, indexTable map[uint32]*Handler, filenames map[
 			return nil, fmt.Errorf("Failed to read log index err=%v", err)
 		}
 	}
-	if ADD_TIMESTAMP {
+	if flags&FlagTimestamp != 0 {
 		// Read 64 bits of timestamp from the stream
 		if timestamp, err := readIntegerFromReader(reader, 8); err == nil {
 			logEntry.Timestamp = int64(timestamp)

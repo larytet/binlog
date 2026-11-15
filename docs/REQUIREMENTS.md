@@ -113,7 +113,7 @@ Out of scope: a network log transport, log rotation, and an interactive viewer.
 | NFR-PORT-2 | S | The code builds on linux/arm64. Windows and macOS are not supported, and the README states this. |
 | NFR-BUILD-1 | M | A `go.mod` exists, with no GOPATH assumptions and no bare `"binlog"` import path. |
 | NFR-SAFE-1 | M | The race detector reports nothing for the supported concurrency model. |
-| NFR-COMPAT-1 | M | The stream format is versioned, or documented as unstable. A change to it needs a test change. |
+| NFR-COMPAT-1 | M | The stream format is versioned (`BLG1` header, done). A change to it needs a change of `testdata/golden_v1.bin`. |
 | NFR-QUAL-1 | S | Statement coverage is 80% or higher per package. The README quotes 86.2%. |
 | NFR-DOC-1 | M | The README matches the code, and its limitations and Todo sections are kept current. |
 

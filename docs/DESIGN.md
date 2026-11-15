@@ -66,7 +66,7 @@ These drive the planned work.
 | D4 | `ast.GetIndexTable` returns `nil, nil, nil`. | No offline decoding. | 5 |
 | D5 | `ast` records `reflect.TypeOf(astNode)`, which is the AST node type. | The recorded types are meaningless. | 5 |
 | D6 | `Fifo.WriteIntegral` writes one byte and ignores `count`. | The FIFO cannot hold 2, 4 or 8 byte values. | 6 |
-| D7 | The stream flags are global variables and the stream is unversioned. | A stream cannot be decoded without knowing the writer's flags. | 4 |
+| D7 | The stream flags are global variables and the stream is unversioned. | A stream cannot be decoded without knowing the writer's flags. | fixed (`WriteHeader`, `ReadHeader`, `DecodeNextFlags`) |
 | D8 | There is no `go.mod`, and `ast` imports `"binlog"`. | `go test ./...` does not run. | 3 |
 | D10 | `parseLogLine` sees `%%` and does `continue` without consuming the second `%`, so the next rune is read as a verb. | `Log("100%% sure %d", 7)` returns an error. | fixed |
 | D11 | `DecodeNext` reads every integer as `uint64`, and `appendArg` switches on that value's type, not on the handler's `argType`. | `int8(-128)` decodes as 128 and `int(-10)` as 18446744073709551606. | fixed |
@@ -92,7 +92,12 @@ replaces it.
 - Keep `firstmoduledata.s`. Add a test that fails with a clear message when the
   `firstmoduledata` link trick or the string-address assumption breaks on a new Go release.
 
-## 4. Stream format v1 (FR-LOG-9, NFR-COMPAT-1, D7, D9)
+## 4. Stream format v1 (FR-LOG-9, NFR-COMPAT-1, D7, D9) - header done
+
+API: `(*Binlog).WriteHeader()` is called by the stream's owner once, `ReadHeader(r)` returns the `Flags`,
+`DecodeNextFlags(r, table, files, flags)` decodes with them. `DecodeNext` keeps using the package
+variables, so existing callers work. Entries cut inside the entry return `io.ErrUnexpectedEOF`, a clean
+end is `io.EOF`. `testdata/golden_v1.bin` pins the byte layout.
 
 Add a stream header, written once by `New` (or by the first `Log`):
 
