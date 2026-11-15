@@ -13,7 +13,7 @@ Logging a constant string with no variadic arguments, where the logger only writ
 
 `binlog.Log()` is about 3x faster than `fmt.Fprintf()` for an empty string and about 30x faster for a call with four arguments. A typical call to `binlog.Log()` is faster than a `map[string]string` access. `binlog` is fast enough for a busy HTTP server.
 
-The benchmark results below come from `binlog_test.go`. In practice, `binlog` is at least 2x faster than other Go logging libraries that I have tested. It is also much faster than popular loggers such as Zap and Logrus. Its API performance is reasonably close to C++ binary loggers such as NanoLog.
+The benchmark results below come from `binlog_test.go` on an older machine (see `docs/BENCH.md` for a recent baseline). In practice, `binlog` is at least 2x faster than other Go logging libraries that I have tested. It is also much faster than popular loggers such as Zap and Logrus. Its API performance is reasonably close to C++ binary loggers such as NanoLog.
 
 ```text
 $ ./testall.sh
@@ -40,16 +40,54 @@ package main
 
 import (
 	"bytes"
+
 	"github.com/larytet/binlog"
 )
 
 func main() {
 	var buf bytes.Buffer
-	constDataBase, constDataSize := binlog.GetSelfTextAddressSize()
-	binlog := binlog.Init(&buf, &WriterControlDummy{}, constDataBase, constDataSize)
-	binlog.Log("Hello %u", 10)
+	base, size := binlog.GetSelfTextAddressSize()
+	logger := binlog.Init(&buf, &binlog.WriterControlDummy{}, base, size)
+	logger.WriteHeader() // optional: the stream then describes itself
+	logger.Log("Hello %d %s %g", 10, "world", 2.5)
 }
 ```
+
+Supported verbs: `%d %i %x %c` for integers (8 to 64 bits, signed or unsigned, and runes), `%f %e %g` for
+`float32` and `float64`, `%s` for strings of any length, and `%%`. Other verbs and verbs that do not fit the
+argument type make `Log()` return an error and write nothing.
+
+## Decoding a log offline
+
+`binlogdump` prints a binary log as text. It needs the executable that wrote the log, and the sources of that
+executable on the same machine (the format strings and argument types are read from them with `go/packages`):
+
+```text
+go install github.com/larytet/binlog/cmd/binlogdump@latest
+binlogdump ./myservice service.binlog          # stream with a header
+binlogdump -flags 8 ./myservice service.binlog # stream without a header: 8 = timestamps
+```
+
+From Go: `ast.GetIndexTable(executable)` returns the table for `binlog.DecodeNextFlags`.
+`ast.LoadTable` also returns the calls that could not be analysed (a format string that is not a constant,
+arguments passed as `args...`, an `interface{}` argument) and the calls that cannot share a hash (the same
+format text with different argument types).
+
+## Buffering: Fifo
+
+`binlog/io` has a lock free ring buffer, `Fifo`, for the thread which writes the log to a file or a socket.
+Several producers and one consumer are supported. `io.NewFramer(fifo)` is both the writer and the
+`WriterControl` of a logger and makes every log entry one block, so that a consumer never sees half an entry.
+Several loggers, each with its own `Framer`, can share one `Fifo`:
+
+```Go
+fifo := io.New(1 << 20)
+framer := io.NewFramer(fifo)
+logger := binlog.Init(framer, framer, base, size)
+// consumer goroutine: fifo.Pop(buf), or binlog.DecodeNextFlags(fifo, ...) since Fifo is an io.Reader
+```
+
+If the ring is full the entry is dropped and counted (`Dropped()`).
 
 # How it works
 
@@ -61,14 +99,13 @@ The L1 and L2 caches store the data required to decode and format the binary str
 
 # Install
 
-You need something like ```../../bin/dep ensure --update``` or something like 
-```go get "github.com/larytet-go/procfs" "github.com/larytet-go/sprintf"  "github.com/larytet-go/moduledata"``` to install missing packages
+`go get github.com/larytet/binlog` (Go 1.27 or later). The library has no dependencies outside the standard library; `binlogdump` uses `golang.org/x/tools/go/packages`.
 
-After all packages are installed this should work ```go test .```
+`go test ./...` runs the unit tests and the end to end tests (about a minute: they build programs and load their sources). `docs/` has the requirements, the design, the test plan and the benchmark baseline.
 
 # Limitations
 
-I did not test for Windows. 
+Linux and amd64 are tested. The code reads `/proc/self/maps`, and `binlogdump` reads ELF executables. Windows and macOS are not supported.
 
 The code relies on these assumptions:
  
@@ -81,7 +118,7 @@ If fast logging matters to you, please comment or vote here: https://github.com/
 
 Maybe one day the standard `log` package will cache format strings and support binary output as well.
 
-The API is not thread safe. One possible workaround is to keep one binlog instance per thread.
+A `Binlog` instance is not thread safe: use one instance per goroutine. Instances can share one output through a `Fifo` (see above).
 
 The application is expected to flush output to a file or to stdout from time to time.
 
@@ -98,10 +135,10 @@ This logger will not work well for applications that build format strings dynami
 }
 ```
 
-The following popular formats are not supported: "%v", "%T", "%c", "%p"
+The following formats are not supported: "%v", "%T", "%p".
 
 
-Offline decoding using only source files is a work in progress. 
+Offline decoding needs the executable and its sources, not the sources alone. A stripped executable is fine, a Go executable built with `-trimpath` is not (the file table has no absolute paths).
 
 
 
@@ -134,27 +171,16 @@ Golang related stuff
 
 # Todo
 
-Decode binary streams using only the source files or the executable. Allow offline decode of the binary streams. Parse the Go sources or executable 
-collect and hash all strings in calls to the binlog. Should I assume that calls to the log look like xx.Log("...", arg1, ...)?
-What happens if there are two calls like this
- 
-```Go
-bin.Log("Number %d", uint32(10))
-bin.Log("Number %d", uint64(10)) 
-```
-I need unique identification: (hash of) filename and line in the code
- 
-Parse ELF route. Try ```readelf --hex-dump=.rodata  ELF-FILENAME```
+Done since the first version: offline decoding, a stream header, floats and runes, signed integers, empty and
+long strings, the FIFO (several producers), `binlogdump`. See `docs/REQUIREMENTS.md` for the status of every
+requirement.
 
-Add suport for "float", "char"
+Open:
 
-Output hash of the constant strings instead of strings themselves. More AST stuff here can allow to skip the constants.
-
-Add a "writer" based on FIFO. The idea is to "allocate" the necessary number of bytes from the FIFO starting from the tail, mark the start of the block as "allocated", return a pointer to the 
-allocated block. The application copies the data to the block, marks the block as "initialized". The "consumer" (a thread which dumps the logs) reverses the process.
-When allocating blocks the FIFO always allocates continuous memory areas. If there is not enough place between the tail and the end of the FIFO the allocator marks 
-the unused area as skipped and attempts to allocate a block from offset zero.
-
-**Add run-time sorting and compression of the logs**. Use a parameter for the window size. 
-
-**Integration with Megalog and ElasticSearch**
+* Run-time sorting of the entries of several streams, and compression of the stream.
+* Export to Elasticsearch (newline delimited JSON) and integration with Megalog.
+* The speed on the benchmark machine is 3 to 4 times slower than the numbers at the top (older, faster
+  hardware). `docs/BENCH.md` has the current baseline. The FIFO write path is about 40 ns slower than
+  a `bytes.Buffer` write.
+* The runtime logger does not detect two calls with the same format text and different argument types
+  (the offline table reports them as a conflict).
