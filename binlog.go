@@ -2,6 +2,7 @@ package binlog
 
 // Based on the idea https://github.com/ScottMansfield/nanolog/issues/4
 import (
+	"bufio"
 	"bytes"
 	"crypto/md5"
 	"encoding/binary"
@@ -11,12 +12,11 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"unicode/utf8"
 	"unsafe"
-
-	"github.com/larytet-go/procfs"
-	"github.com/larytet-go/procfs/maps"
 )
 
 //import "C"
@@ -437,8 +437,7 @@ func appendArg(args []interface{}, arg interface{}, argType reflect.Type) ([]int
 }
 
 func getStringAddress(s string) uint {
-	sHeader := (*reflect.StringHeader)(unsafe.Pointer(&s))
-	return uint(sHeader.Data)
+	return uint(uintptr(unsafe.Pointer(unsafe.StringData(s))))
 }
 
 // Return index of the string given the string address
@@ -505,7 +504,10 @@ func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*Handler, error)
 	sIndex = b.getStringIndex(fmtStr)
 	if sIndex != b.config.ConstDataSize {
 		h = b.L1Cache[sIndex]
-		if h != nil { // fast cache hit? (20% of the whole function is here. Blame CPU data cache?)
+		// Literals are not aligned in the executable, so two short literals can share
+		// a slot (index is address/8). A slot hit counts only for the same address (D16)
+		sAddr := uintptr(getStringAddress(fmtStr))
+		if h != nil && h.Address == sAddr { // fast cache hit? (20% of the whole function is here. Blame CPU data cache?)
 			b.statistics.L1CacheHit++
 		} else {
 			isMiss = true
@@ -515,6 +517,7 @@ func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*Handler, error)
 				log.Printf("%v", err)
 				return nil, err
 			}
+			h.Address = sAddr
 			b.L1Cache[sIndex] = h
 			b.handlersLookupByHash[h.HashUint] = h
 		}
@@ -704,34 +707,57 @@ func next(s *string) (rune, int) {
 	return r, n
 }
 
-func getTextAddressSize(maps []*maps.Maps) (constDataBase uint, constDataSize uint) {
-	s := "TestString"
-	sAddress := getStringAddress(s)
-	for i := 0; i < len(maps); i++ {
-		start := uint(maps[i].AddressStart)
-		end := uint(maps[i].AddressEnd)
-		if (sAddress >= start) && (sAddress <= end) {
-			return start, end - start
+// memoryMap is one line of /proc/<pid>/maps
+type memoryMap struct {
+	start, end uint
+}
+
+// readSelfMaps parses /proc/self/maps (linux only)
+func readSelfMaps() ([]memoryMap, error) {
+	f, err := os.Open("/proc/self/maps")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	var result []memoryMap
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		// 00400000-0045b000 r-xp 00000000 08:01 1234 /path
+		rng, _, _ := strings.Cut(scanner.Text(), " ")
+		lo, hi, ok := strings.Cut(rng, "-")
+		if !ok {
+			continue
+		}
+		start, err1 := strconv.ParseUint(lo, 16, 64)
+		end, err2 := strconv.ParseUint(hi, 16, 64)
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		result = append(result, memoryMap{uint(start), uint(end)})
+	}
+	return result, scanner.Err()
+}
+
+// getTextAddressSize returns the memory map which holds the string literals
+func getTextAddressSize(maps []memoryMap) (constDataBase uint, constDataSize uint) {
+	sAddress := getStringAddress("TestString")
+	for _, m := range maps {
+		if sAddress >= m.start && sAddress <= m.end {
+			return m.start, m.end - m.start
 		}
 	}
 
 	return 0, 0
 }
 
-// GetSelfTextAddressSize returns base address and size of the text segment
-// There are two ways to do this - procfs or moduledata
+// GetSelfTextAddressSize returns base address and size of the memory map with the
+// string literals of this process
 func GetSelfTextAddressSize() (constDataBase uint, constDataSize uint) {
-	selfPid := os.Getpid()
-	process, err := procfs.NewProcess(selfPid, true)
+	maps, err := readSelfMaps()
 	if err != nil {
-		log.Fatalf("Fail to read procfs context %v", err)
-	}
-	maps, err := process.Maps()
-	if err != nil {
-		log.Fatalf("Fail to read procfs/maps context %v", err)
+		log.Fatalf("Fail to read /proc/self/maps %v", err)
 	}
 	return getTextAddressSize(maps)
-
 }
 
 var defaultHandler Handler
@@ -755,13 +781,7 @@ func (w *writerByteArray) getSize() int {
 
 // Copy w.count bytes from the unsafe pointer to the byte stream
 func (w *writerByteArray) write(ioWriter io.Writer, data unsafe.Pointer) error {
-	// I am doing something which https://golang.org/pkg/unsafe/ explicitly forbids
-	var hdr reflect.SliceHeader
-	hdr.Len = w.count
-	hdr.Data = uintptr(unsafe.Pointer((*byte)(data)))
-	hdr.Cap = w.count
-
-	dataToWrite := *((*[]byte)(unsafe.Pointer(&hdr)))
+	dataToWrite := unsafe.Slice((*byte)(data), w.count)
 	// In the benchmarks this callback is an empty function
 	_, err := ioWriter.Write(dataToWrite)
 	return err
@@ -777,15 +797,18 @@ func (w *writerString) getSize() int {
 // Write the length (stringLengthSize bytes) of the string followed by the string itself
 // TODO: if the string is const I need only it's hash
 func (w *writerString) write(ioWriter io.Writer, data unsafe.Pointer) error {
-	// I am doing something which https://golang.org/pkg/unsafe/ explicitly forbids
-	var hdr = (*reflect.StringHeader)(data)
+	str := *(*string)(data)
+	length := len(str)
 	writer := &writerByteArray{stringLengthSize}
-	if err := writer.write(ioWriter, unsafe.Pointer(&(hdr.Len))); err != nil {
+	if err := writer.write(ioWriter, unsafe.Pointer(&length)); err != nil {
 		return err
 	}
+	if length == 0 {
+		return nil
+	}
 
-	writer = &writerByteArray{hdr.Len}
-	if err := writer.write(ioWriter, unsafe.Pointer(hdr.Data)); err != nil {
+	writer = &writerByteArray{length}
+	if err := writer.write(ioWriter, unsafe.Pointer(unsafe.StringData(str))); err != nil {
 		return err
 	}
 

@@ -74,9 +74,16 @@ These drive the planned work.
 | D13 | The string length prefix is 16 bits. | A string of 70000 bytes is written truncated and decodes to the wrong text. | fixed |
 | D14 | `moduledata.GetModules` dereferences a nil pointer on executables built by Go 1.27 (SIGSEGV, not recoverable). | `GetIndexTable` cannot be used on a current executable at all. | 5 |
 | D15 | `parseLogLine` indexes `args[argIndex]` for each verb. | Fewer arguments than verbs panics (found by reading, not yet reproduced). | fixed |
+| D16 | The L1 index is `address/8`, but literals are not aligned in the executable. Two short literals can share a slot. | The second call reuses the first one's handler and logs the wrong hash and arguments. Found when a layout change made `uint %d` and `int8 %d` collide. | fixed: a hit needs `Handler.Address` to equal the literal's address |
 | D9 | `Handler.Args.args` is indexed by `args` length checked at call time only. | Error on mismatch, but only after the handler is cached from a bad first call. | 4 |
 
 ## 3. Build and packaging (NFR-BUILD-1, NFR-PORT-1)
+
+Done: `go.mod` (Go 1.27.4, the latest release), module import paths. The legacy dependencies
+`larytet-go/procfs`, `larytet-go/nanotime` and `larytet-go/sprintf` are replaced by the standard
+library (`/proc/self/maps` parsing, `time`, `fmt`), and `reflect.StringHeader/SliceHeader` by
+`unsafe.StringData/Slice`. `larytet-go/moduledata` remains until the offline decoder (section 5)
+replaces it.
 
 - Add `go.mod` with module path `github.com/larytet/binlog`.
 - Replace the `"binlog"` import in `ast` by the module path.

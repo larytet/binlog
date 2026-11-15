@@ -124,7 +124,7 @@ Out of scope: a network log transport, log rotation, and an interactive viewer.
 - The implementation uses `unsafe`, `reflect`, `StringHeader` and the `firstmoduledata` link
   workaround (golang/go#15006). These may break on a new Go release, so the build must detect it.
 - The application flushes the output itself.
-- The dependencies are `larytet-go/procfs`, `larytet-go/sprintf` and `larytet-go/moduledata`.
+- The only non-standard dependency of the library is `larytet-go/moduledata` (until FR-DEC-2 lands). Benchmarks also use zap, logrus, glog and fasthttp.
 
 ## 6. Acceptance
 
