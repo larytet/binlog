@@ -26,7 +26,6 @@ const offlineDecoderReady = false
 // knownBroken lists the cases of the sample program that fail today, with the requirement
 // the fix belongs to. Remove an entry in the commit that fixes it.
 var knownBroken = map[string]string{
-	"percent-literal": "FR-LOG-11: %% in the format string is mis-parsed",
 	"int-negative":    "FR-LOG-3: decoder returns signed integers as unsigned",
 	"int8-min":        "FR-LOG-3: decoder returns signed integers as unsigned",
 	"int16-min":       "FR-LOG-3: decoder returns signed integers as unsigned",
