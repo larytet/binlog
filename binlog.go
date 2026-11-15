@@ -658,9 +658,13 @@ func parseLogLine(gold string, args []interface{}) ([]*HandlerArg, error) {
 		}
 		// Literal % sign
 		if peek(f) == '%' {
+			next(f)
 			continue
 		}
 		r, _ = next(f)
+		if argIndex >= len(args) {
+			return nil, fmt.Errorf("Not enough arguments (%d) for the format string %s", len(args), gold)
+		}
 		arg := args[argIndex]
 		argType := reflect.TypeOf(arg)
 		argKind := argType.Kind()

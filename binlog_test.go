@@ -1118,3 +1118,24 @@ func BenchmarkTypeCast2(b *testing.B) {
 		count = count + *((*int)(data))
 	}
 }
+
+// FR-LOG-11 (D10): %% is a literal percent sign and takes no argument
+func TestParseLogLinePercent(t *testing.T) {
+	hArgs, err := parseLogLine("100%% sure %d", []interface{}{7})
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if len(hArgs) != 1 || hArgs[0].fmtVerb != 'd' {
+		t.Fatalf("expected one %%d argument, got %d", len(hArgs))
+	}
+	if hArgs, err = parseLogLine("%%%%", nil); err != nil || len(hArgs) != 0 {
+		t.Fatalf("'%%%%%%%%' must have no arguments: %v %v", hArgs, err)
+	}
+}
+
+// D15: fewer arguments than verbs is an error, not a panic
+func TestParseLogLineMissingArgs(t *testing.T) {
+	if _, err := parseLogLine("%d %d", []interface{}{1}); err == nil {
+		t.Fatalf("expected an error for a missing argument")
+	}
+}
