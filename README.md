@@ -95,6 +95,21 @@ logger := binlog.Init(framer, framer, base, size)
 
 If the ring is full the entry is dropped and counted (`Dropped()`).
 
+## Compression
+
+The goroutine which writes the log to its destination can compress it, the logging call never does:
+
+```Go
+file, _ := os.Create("service.blz")
+zw, _ := io.NewCompressedWriter(file, io.Flate, 0) // io.None stores, io.Flate uses DEFLATE
+zw.Write(block)                                    // for example the blocks popped from a Fifo
+zw.Close()
+```
+
+Blocks are independent and carry a CRC, so a damaged block is reported and the rest of the stream is not
+misread. A synthetic stream of repeated entries shrank 5.7 times with `Flate` in the tests (`TestCompressRatio`); the ratio of a real log depends on its content, and `Flate` runs at about 30 MB/s per goroutine. `binlogdump` reads compressed streams
+directly, `io.NewCompressedReader` does it from Go.
+
 # How it works
 
 When an application calls `binlog.Log()`, the logger checks a cache using the offset of the format string in the executable as an index. This step is fast, like 2 opcodes fast.
@@ -183,7 +198,6 @@ requirement.
 
 Open:
 
-* Compression of the stream.
 * Integration with Megalog (its interface is not defined yet).
 * The speed on the benchmark machine is 3 to 4 times slower than the numbers at the top (older, faster
   hardware). `docs/BENCH.md` has the current baseline. The FIFO write path is about 40 ns slower than

@@ -8,6 +8,8 @@
 // For a stream without a header give -flags: the sum of 1 string index, 2 source line,
 // 4 log index and 8 timestamp.
 //
+// A stream compressed with io.CompressedWriter is decompressed automatically.
+//
 // Several streams are printed one after the other. With -sort they are merged into one list
 // ordered by timestamp or index, see binlog.Merge for the meaning of -window. All streams must
 // have the optional fields that the key needs.
@@ -28,6 +30,7 @@ import (
 
 	"github.com/larytet/binlog"
 	"github.com/larytet/binlog/ast"
+	blio "github.com/larytet/binlog/io"
 )
 
 func main() {
@@ -91,6 +94,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			in = f
 		}
 		reader := bufio.NewReader(in)
+		// a compressed stream (io.CompressedWriter) is decompressed, what is inside is read as usual
+		if head, err := reader.Peek(len(blio.CompressedMagic)); err == nil && string(head) == blio.CompressedMagic {
+			reader = bufio.NewReader(blio.NewCompressedReader(reader))
+		}
 		streamFlags := binlog.Flags(*flags)
 		if head, err := reader.Peek(len(binlog.StreamMagic)); err == nil && string(head) == binlog.StreamMagic {
 			if streamFlags, err = binlog.ReadHeader(reader); err != nil {

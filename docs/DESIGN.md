@@ -274,8 +274,12 @@ the timestamp, index and source position when present.
   a bounded buffer (a min-heap) and emits the smallest entry when it is full. Streams that are each in order
   merge exactly with a window equal to their number; late entries are emitted anyway and counted. In
   `binlogdump`: `-sort timestamp|index -window N` over several stream files (all with the same optional fields).
-- **Compression (FR-COMP-1)**: compress the FIFO's output per block in the consumer
-  goroutine, never on the hot path. The block carries a length and an algorithm id.
+- **Compression (FR-COMP-1)** - done in `io/compress.go`: `CompressedWriter` / `CompressedReader`, run by the
+  consumer goroutine, never in `Log()`. Stream magic `BLZ1`, then independent blocks of
+  `algorithm(1) rawLength(4) storedLength(4) crc32(4) payload`; a block that does not shrink is stored.
+  Algorithms: `None` and `Flate` (standard library only; zstd or LZ4 would add a dependency). A damaged
+  block is an error, lengths are bounded (16 MB) so that a damaged header cannot make the reader allocate
+  without limit. `binlogdump` recognises the magic.
 - **Elasticsearch (FR-INT-1)** - done: `binlogdump -format ndjson` emits one JSON object per entry,
   `-format es-bulk -index NAME` adds the bulk API action line. NaN and infinities are strings,
   invalid UTF-8 in a string becomes U+FFFD (encoding/json).

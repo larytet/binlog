@@ -706,3 +706,57 @@ func TestTC_SORT_1_BinlogdumpMerge(t *testing.T) {
 		t.Errorf("different flags: %v %s", err, out)
 	}
 }
+
+// TC-COMP-1 (FR-COMP-1): a stream compressed with io.CompressedWriter is printed by binlogdump
+// exactly as the plain stream, smaller on disk; a damaged one is reported and not printed wrong
+func TestTC_COMP_1_BinlogdumpCompressed(t *testing.T) {
+	dump := filepath.Join(buildDir, "binlogdump")
+	if out, err := exec.Command("go", "build", "-o", dump, "../cmd/binlogdump").CombinedOutput(); err != nil {
+		t.Fatalf("go build binlogdump: %v\n%s", err, out)
+	}
+	exe := build(t, "default")
+	dir := run(t, "default", 0)
+	plain, err := os.ReadFile(filepath.Join(dir, "stream-static.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, algo := range []blio.Algorithm{blio.None, blio.Flate} {
+		var packed bytes.Buffer
+		cw, err := blio.NewCompressedWriter(&packed, algo, 512)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cw.Write(plain)
+		cw.Close()
+		if algo == blio.Flate && packed.Len() >= len(plain) {
+			t.Errorf("flate: %d bytes of %d", packed.Len(), len(plain))
+		}
+		file := filepath.Join(dir, "stream-"+algo.String()+".blz")
+		if err := os.WriteFile(file, packed.Bytes(), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		want, err := exec.Command(dump, exe, filepath.Join(dir, "stream-static.bin")).Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := exec.Command(dump, exe, file).Output()
+		if err != nil || !bytes.Equal(got, want) || len(got) == 0 {
+			t.Fatalf("%v: output differs from the plain stream (%d and %d bytes), err %v", algo, len(got), len(want), err)
+		}
+		// damage one byte in the middle
+		bad := append([]byte(nil), packed.Bytes()...)
+		bad[len(bad)/2] ^= 0x55
+		badFile := filepath.Join(dir, "bad-"+algo.String()+".blz")
+		os.WriteFile(badFile, bad, 0o644)
+		var stderr bytes.Buffer
+		cmd := exec.Command(dump, exe, badFile)
+		cmd.Stderr = &stderr
+		out, err := cmd.Output()
+		if err == nil || !bytes.HasPrefix(want, out) {
+			t.Fatalf("%v: damaged stream: err %v, output is not a prefix of the correct one", algo, err)
+		}
+		if !strings.Contains(stderr.String(), "binlogdump:") {
+			t.Errorf("%v: no message for the damaged stream: %q", algo, stderr.String())
+		}
+	}
+}
