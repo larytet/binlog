@@ -182,13 +182,21 @@ The existing signature stays so that callers keep working. The function returns 
 when the executable cannot be read, and returns a table plus a list of diagnostics when
 some calls are skipped.
 
-## 6. FIFO (FR-FIFO-1 to FR-FIFO-6, D6) - phase 1 implemented
+## 6. FIFO (FR-FIFO-1 to FR-FIFO-6, D6) - phases 1 and 2 implemented
 
 Implemented in `io/io.go`. Differences from the plan: the ring size is a power of two (a mask instead of a
 division); the 32 bit header packs the state and a 24 bit length and is the only synchronisation; positions are
 monotonic 64 bit byte counters; the consumer stops at `head == tail` and never reads the memory at the tail (it
 holds stale bytes of an earlier lap); `Fifo` is also an `io.Writer` and an `io.Reader`; `io.Framer` makes an
 entry one block through the logger's `WriterControl`. Write cost is about 60 ns, see `docs/BENCH.md`.
+
+Phase 2 (several producers) replaced the single-producer design instead of living next to it: `Alloc` reserves
+with one compare and swap of the tail, there is no separate "allocated" state, the consumer zeroes every block
+it releases, so a reserved block whose header is not written yet reads as free and the consumer waits for it.
+A bug found while testing: `head` is loaded before `tail`, but it can still be stale by the time the free space is
+computed, and `tail-head` then exceeds the ring size; the unsigned subtraction wrapped and reported a huge free
+space, so producers overwrote unread blocks. `Alloc` now reloads in that case (`TestManyProducers` found it).
+A producer stopped between `Alloc` and `Commit` holds up the consumer and every later block.
 
 ### 6.1 Layout
 

@@ -6,9 +6,13 @@
 // were allocated. Blocks are contiguous: when the space at the end of the ring is too small
 // the producer marks it as skipped and allocates from offset zero.
 //
-// This version supports one producer goroutine and one consumer goroutine. Producer and
-// consumer synchronise through the 32 bit header of each block only (atomic load and store),
-// there is no lock and no atomic read-modify-write.
+// Any number of producer goroutines and one consumer goroutine are supported. A producer
+// reserves its block with one compare and swap of the tail. The producer publishes the block
+// with one atomic store of its 32 bit header, which the consumer polls. There is no lock.
+// All memory behind the head is zero: the consumer clears every block it releases. A header
+// that a producer has not written yet therefore reads as "free", and the consumer waits for it.
+// A producer that is stopped between Alloc and Commit holds up the consumer and with it
+// every later block, so keep that window short.
 package io
 
 import (
@@ -20,10 +24,9 @@ import (
 
 // Block states, the low 8 bits of the block header. The upper 24 bits are the payload length.
 const (
-	stateFree      = 0 // never used or already consumed
-	stateAllocated = 1 // the producer is filling the block
-	stateReady     = 2 // committed, the consumer may read it
-	stateSkip      = 3 // the rest of the ring up to its end is unused
+	stateFree  = 0 // not written yet (a reserved block is free until it is committed)
+	stateReady = 2 // committed, the consumer may read it
+	stateSkip  = 3 // the rest of the ring up to its end is unused
 )
 
 const (
@@ -40,7 +43,7 @@ type Fifo struct {
 	size  uint64   // bytes in the ring, a power of two
 
 	// head and tail count bytes since the start and only grow: the position in the ring
-	// is the counter modulo size. tail is written by the producer, head by the consumer.
+	// is the counter modulo size. tail is advanced by the producers, head by the consumer.
 	head    atomic.Uint64
 	tail    atomic.Uint64
 	dropped atomic.Uint64
@@ -79,37 +82,46 @@ func (f *Fifo) header(off uint64) *uint32 {
 func pack(state uint32, length int) uint32 { return state | uint32(length)<<8 }
 
 // Alloc reserves a block with n bytes of payload. It returns false, and counts a drop,
-// if the ring is full or n is out of range. Producer only.
+// if the ring is full or n is out of range. Safe for concurrent use by several producers.
 func (f *Fifo) Alloc(n int) (Block, bool) {
 	if n < 0 || n > MaxBlock {
 		f.dropped.Add(1)
 		return Block{}, false
 	}
 	total := blockSize(n)
-	tail := f.tail.Load()
-	free := f.size - (tail - f.head.Load())
-	off := tail & (f.size - 1)
-	var skip uint64
-	if off+total > f.size {
-		skip = f.size - off
+	for {
+		// head first: it never passes a tail that is loaded later
+		head := f.head.Load()
+		tail := f.tail.Load()
+		off := tail & (f.size - 1)
+		var skip uint64
+		if off+total > f.size {
+			skip = f.size - off
+		}
+		used := tail - head
+		if used > f.size {
+			// Impossible in a consistent state: head is stale, other producers and the
+			// consumer have moved on since it was loaded. Without this check the unsigned
+			// subtraction below would wrap and report a huge free space.
+			continue
+		}
+		if total > f.size || f.size-used < skip+total {
+			f.dropped.Add(1)
+			return Block{}, false
+		}
+		if !f.tail.CompareAndSwap(tail, tail+skip+total) {
+			continue // another producer was first
+		}
+		if skip != 0 {
+			atomic.StoreUint32(f.header(off), pack(stateSkip, 0))
+			off = 0
+		}
+		return Block{Data: f.data[off+headerSize : off+headerSize+uint64(n)], off: off}, true
 	}
-	if total > f.size || free < skip+total {
-		f.dropped.Add(1)
-		return Block{}, false
-	}
-	if skip != 0 {
-		*f.header(off) = pack(stateSkip, 0)
-		tail += skip
-		off = 0
-	}
-	// A plain store is enough: the consumer reads a header only after it has loaded a tail
-	// beyond it, and the tail store below publishes this write.
-	*f.header(off) = pack(stateAllocated, n)
-	f.tail.Store(tail + total)
-	return Block{Data: f.data[off+headerSize : off+headerSize+uint64(n)], off: off}, true
 }
 
-// Commit makes the block visible to the consumer. Producer only.
+// Commit makes the block visible to the consumer. Call it once, from the goroutine
+// that allocated the block.
 func (f *Fifo) Commit(b Block) {
 	atomic.StoreUint32(f.header(b.off), pack(stateReady, len(b.Data)))
 }
@@ -128,7 +140,7 @@ func (f *Fifo) next() (head uint64, header uint32, ok bool) {
 		if header&0xff != stateSkip {
 			return head, header, true
 		}
-		atomic.StoreUint32(f.header(off), stateFree)
+		clear(f.data[off:]) // the skipped space up to the end of the ring, including its header
 		f.head.Store(head + (f.size - off))
 	}
 }
@@ -137,14 +149,15 @@ func (f *Fifo) next() (head uint64, header uint32, ok bool) {
 func (f *Fifo) consume(head uint64, header uint32, dst []byte) []byte {
 	off, n := head%f.size, uint64(header>>8)
 	dst = append(dst, f.data[off+headerSize:off+headerSize+n]...)
-	atomic.StoreUint32(f.header(off), stateFree)
-	f.head.Store(head + blockSize(int(n)))
+	total := blockSize(int(n))
+	clear(f.data[off : off+total]) // see the package comment: memory behind the head is zero
+	f.head.Store(head + total)
 	return dst
 }
 
 // Pop appends the payload of the oldest committed block to dst and returns it.
 // It returns false if there is no committed block: the ring is empty, or the producer has
-// allocated the next block and not committed it yet. Consumer only.
+// reserved the next block and not committed it yet. Consumer only.
 func (f *Fifo) Pop(dst []byte) ([]byte, bool) {
 	head, header, ok := f.next()
 	if !ok || header&0xff != stateReady {
@@ -169,7 +182,7 @@ func (f *Fifo) Dropped() uint64 { return f.dropped.Load() }
 func (f *Fifo) ResetDropped() uint64 { return f.dropped.Swap(0) }
 
 // WriteIntegral writes a block holding a little endian value of count (1, 2, 4 or 8) bytes.
-// It returns false if the ring is full or count is not supported. Producer only.
+// It returns false if the ring is full or count is not supported. Safe for concurrent producers.
 func (f *Fifo) WriteIntegral(value uint64, count int) (ok bool) {
 	if count != 1 && count != 2 && count != 4 && count != 8 {
 		return false
@@ -223,7 +236,7 @@ type stdioError string
 func (e stdioError) Error() string { return string(e) }
 
 // Write makes Fifo an io.Writer: p becomes one block. It returns ErrFull and writes nothing
-// if the ring has no room. Producer only.
+// if the ring has no room. Safe for concurrent producers, a block is never split.
 func (f *Fifo) Write(p []byte) (int, error) {
 	b, ok := f.Alloc(len(p))
 	if !ok {
@@ -260,11 +273,12 @@ func (f *Fifo) Read(p []byte) (int, error) {
 //
 // The logger calls FrameStart, several Write calls and FrameEnd for every entry. The entry is
 // collected in a private buffer and committed to the Fifo at FrameEnd. If the Fifo is full the
-// whole entry is dropped (Fifo.Dropped counts it). One Framer serves one logger, and
-// the Fifo has one producer goroutine.
+// whole entry is dropped (Fifo.Dropped counts it). One Framer serves one logger. Several loggers,
+// each with its own Framer, can share one Fifo.
 type Framer struct {
-	fifo *Fifo
-	buf  []byte
+	fifo    *Fifo
+	buf     []byte
+	dropped atomic.Uint64
 }
 
 // NewFramer returns a Framer which writes to f
@@ -282,6 +296,9 @@ func (fr *Framer) Write(p []byte) (int, error) {
 // FrameEnd commits the entry as one block. The argument is not used.
 func (fr *Framer) FrameEnd(stdio.Writer) {
 	if _, err := fr.fifo.Write(fr.buf); err != nil {
-		return // dropped and counted by the Fifo
+		fr.dropped.Add(1) // the Fifo counts it too, but it counts the drops of every producer
 	}
 }
+
+// Dropped returns the number of entries of this Framer that were dropped because the Fifo was full
+func (fr *Framer) Dropped() uint64 { return fr.dropped.Load() }

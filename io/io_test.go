@@ -2,8 +2,10 @@ package io
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"math/rand"
+	"runtime"
 	"sync"
 	"testing"
 )
@@ -205,6 +207,62 @@ func TestProducerConsumer(t *testing.T) {
 	wg.Wait()
 	if f.Len() != 0 {
 		t.Fatalf("Len %d", f.Len())
+	}
+}
+
+// TC-FIFO-8 (FR-FIFO-5): several producers, one consumer, every block arrives whole and each
+// producer's blocks arrive in order (run with -race)
+func TestManyProducers(t *testing.T) {
+	const producers, perProducer = 6, 40000
+	f := New(8192) // small: the ring wraps and fills up all the time
+	var wg sync.WaitGroup
+	for p := 0; p < producers; p++ {
+		wg.Add(1)
+		go func(p int) {
+			defer wg.Done()
+			for i := 0; i < perProducer; {
+				n := 8 + (i+p)%25 // blocks of 8 to 32 bytes
+				b, ok := f.Alloc(n)
+				if !ok {
+					runtime.Gosched()
+					continue
+				}
+				binary.LittleEndian.PutUint32(b.Data[0:], uint32(p))
+				binary.LittleEndian.PutUint32(b.Data[4:], uint32(i))
+				for j := 8; j < n; j++ {
+					b.Data[j] = byte(p + i + j) // a pattern that a torn block would break
+				}
+				f.Commit(b)
+				i++
+			}
+		}(p)
+	}
+	next := make([]int, producers)
+	var buf []byte
+	for received := 0; received < producers*perProducer; {
+		var ok bool
+		if buf, ok = f.Pop(buf[:0]); !ok {
+			runtime.Gosched()
+			continue
+		}
+		p, i := int(binary.LittleEndian.Uint32(buf)), int(binary.LittleEndian.Uint32(buf[4:]))
+		if p >= producers || i != next[p] {
+			t.Fatalf("producer %d: got block %d, want %d", p, i, next[p])
+		}
+		if len(buf) != 8+(i+p)%25 {
+			t.Fatalf("producer %d block %d: length %d", p, i, len(buf))
+		}
+		for j := 8; j < len(buf); j++ {
+			if buf[j] != byte(p+i+j) {
+				t.Fatalf("producer %d block %d: byte %d is torn", p, i, j)
+			}
+		}
+		next[p]++
+		received++
+	}
+	wg.Wait()
+	if _, ok := f.Pop(nil); ok || f.Len() != 0 {
+		t.Fatalf("not empty at the end, Len %d", f.Len())
 	}
 }
 

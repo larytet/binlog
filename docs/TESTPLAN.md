@@ -155,7 +155,7 @@ a reason, and none fails.
 
 `go test ./e2e/...` runs the sample program in 2 build modes x 16 flag combinations x 26 cases.
 Known failures are listed in `knownBroken` in `e2e/e2e_test.go`, each with its requirement.
-The list is empty since D10 to D13 were fixed. TC-DEC-1 to 9 and TC-FIFO-9 are implemented (F4, F5, F6 done). TC-FIFO-8 waits for F7.
+The list is empty since D10 to D13 were fixed. TC-DEC-1 to 9 and TC-FIFO-9 are implemented (F4, F5, F6 done). TC-FIFO-8 is implemented too (F7).
 
 ## 5. Task map
 
@@ -167,7 +167,7 @@ The list is empty since D10 to D13 were fixed. TC-DEC-1 to 9 and TC-FIFO-9 are i
 | F4 | Offline index table (set `offlineDecoderReady` in `e2e/e2e_test.go`) | TC-DEC-1 to 7, 9 |
 | F5 | `binlogdump` | TC-DEC-8 |
 | F6 | FIFO phase 1 | TC-FIFO-1 to 7, 9, TC-PERF-4, TC-SAFE-1, TC-QUAL-1 |
-| F7 | FIFO phase 2 | TC-FIFO-8 |
+| F7 | FIFO phase 2 (several producers) | TC-FIFO-8, TC-FIFO-9 with several loggers |
 
 ## 6. Exit criteria
 

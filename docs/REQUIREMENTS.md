@@ -58,7 +58,7 @@ Out of scope: a network log transport, log rotation, and an interactive viewer.
 | ID | Pri | Status | Requirement |
 |---|---|---|---|
 | FR-CONC-1 | M | Done | The documented model is one `Binlog` instance per goroutine or thread. |
-| FR-CONC-2 | S | Partial | Several loggers can share one output through a FIFO or `WriterControl` without interleaving inside an entry. One logger per FIFO is done (`io.Framer`: an entry is one block). Several producers need FR-FIFO-5. |
+| FR-CONC-2 | S | Done | Several loggers can share one output through a FIFO or `WriterControl` without interleaving inside an entry. Done with `io.Framer` (an entry is one block) and a multi-producer `Fifo`. |
 | FR-CONC-3 | C | Open | A single `Binlog` can be used from several goroutines with one atomic on the hot path. |
 
 ### 3.4 FIFO writer (`io` package)
@@ -69,7 +69,7 @@ Out of scope: a network log transport, log rotation, and an interactive viewer.
 | FR-FIFO-2 | M | Done | Allocation returns a contiguous block. If the space at the end is too small, the tail is marked skipped and allocation restarts at offset 0. |
 | FR-FIFO-3 | M | Done | Each block has an allocated flag and an initialized flag. The consumer reads only initialized blocks, in allocation order. |
 | FR-FIFO-4 | M | Done | When the FIFO is full, a write fails or drops and increments a counter. It never overwrites unread data. |
-| FR-FIFO-5 | S | Open | Several producers can allocate concurrently with one consumer, using one atomic per allocation. |
+| FR-FIFO-5 | S | Done | Several producers can allocate concurrently with one consumer, using one atomic per allocation. |
 | FR-FIFO-6 | M | Done | `Len()` reports the number of unread bytes correctly, including after wraparound. |
 
 ### 3.5 Offline decoding

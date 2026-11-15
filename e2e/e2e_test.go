@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -522,6 +523,78 @@ func TestTC_FIFO_9_LoggerOverFifo(t *testing.T) {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 		next++
+	}
+	wg.Wait()
+}
+
+// TC-FIFO-9 (FR-CONC-2): several loggers, each with its own Framer, share one Fifo.
+// No entry is torn or lost, and the entries of each logger arrive in order (run with -race).
+func TestTC_FIFO_9_SeveralLoggersOneFifo(t *testing.T) {
+	const loggers, entries = 3, 15000
+	fifo := blio.New(1 << 13)
+	base, size := binlog.GetSelfTextAddressSize()
+	table := map[uint32]*binlog.Handler{}
+	logs := make([]func(i int) error, loggers)
+	framers := make([]*blio.Framer, loggers)
+	for l := 0; l < loggers; l++ {
+		framer := blio.NewFramer(fifo)
+		framers[l] = framer
+		b := binlog.Init(framer, framer, base, size)
+		// distinct literals: the handler table is keyed by the format string
+		switch l {
+		case 0:
+			logs[l] = func(i int) error { return b.Log("logger zero %d %s", i, "a") }
+		case 1:
+			logs[l] = func(i int) error { return b.Log("logger one %d %s", i, "bb") }
+		case 2:
+			logs[l] = func(i int) error { return b.Log("logger two %d %s", i, "ccc") }
+		}
+		logs[l](0) // warm up: the handler exists before the consumer reads the table
+		handlers, _ := b.GetIndexTable()
+		for k, v := range handlers {
+			table[k] = v
+		}
+		if _, err := binlog.DecodeNextFlags(fifo, table, nil, 0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var wg sync.WaitGroup
+	for l := 0; l < loggers; l++ {
+		wg.Add(1)
+		go func(l int) {
+			defer wg.Done()
+			for i := 1; i <= entries; {
+				before := framers[l].Dropped()
+				logs[l](i)
+				if framers[l].Dropped() != before {
+					runtime.Gosched() // full: the entry was dropped, log it again
+					continue
+				}
+				i++
+			}
+		}(l)
+	}
+	next := [loggers]int{1, 1, 1}
+	for received := 0; received < loggers*entries; {
+		entry, err := binlog.DecodeNextFlags(fifo, table, nil, 0)
+		if err == io.EOF {
+			continue
+		}
+		if err != nil {
+			t.Fatalf("after %d entries: %v", received, err)
+		}
+		text := fmt.Sprintf(entry.FmtString, entry.Args...)
+		var l, i int
+		var word, payload string
+		if _, err := fmt.Sscanf(text, "logger %s %d %s", &word, &i, &payload); err != nil {
+			t.Fatalf("bad entry %q: %v", text, err)
+		}
+		l = map[string]int{"zero": 0, "one": 1, "two": 2}[word]
+		if i != next[l] || payload != strings.Repeat(string(rune('a'+l)), l+1) {
+			t.Fatalf("logger %d: got %q, want entry %d", l, text, next[l])
+		}
+		next[l]++
+		received++
 	}
 	wg.Wait()
 }
