@@ -274,8 +274,9 @@ the timestamp, index and source position when present.
   index, with a bounded window.
 - **Compression (FR-COMP-1)**: compress the FIFO's output per block in the consumer
   goroutine, never on the hot path. The block carries a length and an algorithm id.
-- **Elasticsearch (FR-INT-1)**: `binlogdump -format ndjson` emits one JSON object per entry
-  in the bulk API format.
+- **Elasticsearch (FR-INT-1)** - done: `binlogdump -format ndjson` emits one JSON object per entry,
+  `-format es-bulk -index NAME` adds the bulk API action line. NaN and infinities are strings,
+  invalid UTF-8 in a string becomes U+FFFD (encoding/json).
 - **Megalog (FR-INT-2)**: blocked until its interface is defined.
 
 ## 10. Risks

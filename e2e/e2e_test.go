@@ -8,6 +8,7 @@ package e2e
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	blio "github.com/larytet/binlog/io"
 	"io"
@@ -597,4 +598,49 @@ func TestTC_FIFO_9_SeveralLoggersOneFifo(t *testing.T) {
 		received++
 	}
 	wg.Wait()
+}
+
+// FR-INT-1: -format es-bulk gives an action line and a document line per entry, all valid JSON
+func TestTC_INT_1_ElasticsearchBulk(t *testing.T) {
+	dump := filepath.Join(buildDir, "binlogdump")
+	if out, err := exec.Command("go", "build", "-o", dump, "../cmd/binlogdump").CombinedOutput(); err != nil {
+		t.Fatalf("go build binlogdump: %v\n%s", err, out)
+	}
+	exe := build(t, "default")
+	dir := run(t, "default", 8)
+	var stdout bytes.Buffer
+	cmd := exec.Command(dump, "-flags", "8", "-format", "es-bulk", "-index", "e2e", exe, filepath.Join(dir, "stream.bin"))
+	cmd.Stdout = &stdout
+	cmd.Run() // fails on the first l2-cache entry, see TC-DEC-8
+	lines := strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n")
+	names, expected := readTable(t, filepath.Join(dir, "expected.txt"))
+	docs := 0
+	for _, name := range names {
+		if strings.HasPrefix(name, "l2-cache") {
+			break
+		}
+		if 2*docs+1 >= len(lines) {
+			t.Fatalf("%d lines, want a pair for %s", len(lines), name)
+		}
+		var action map[string]map[string]string
+		if err := json.Unmarshal([]byte(lines[2*docs]), &action); err != nil || action["index"]["_index"] != "e2e" {
+			t.Fatalf("%s: bad action line %s", name, shorten(lines[2*docs]))
+		}
+		var doc map[string]interface{}
+		if err := json.Unmarshal([]byte(lines[2*docs+1]), &doc); err != nil {
+			t.Fatalf("%s: invalid JSON %s", name, shorten(lines[2*docs+1]))
+		}
+		want, _ := strconv.Unquote(expected[name])
+		// encoding/json replaces invalid UTF-8 by U+FFFD, that is the only allowed difference
+		if got, _ := doc["message"].(string); got != want && got != strings.ToValidUTF8(want, "\uFFFD") {
+			t.Fatalf("%s: message %s, want %s", name, shorten(got), shorten(want))
+		}
+		if _, ok := doc["timestamp"]; !ok {
+			t.Fatalf("%s: no timestamp", name)
+		}
+		docs++
+	}
+	if docs == 0 || len(lines) != 2*docs {
+		t.Fatalf("%d documents in %d lines", docs, len(lines))
+	}
 }

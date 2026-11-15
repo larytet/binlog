@@ -98,7 +98,7 @@ Out of scope: a network log transport, log rotation, and an interactive viewer.
 
 | ID | Pri | Status | Requirement |
 |---|---|---|---|
-| FR-INT-1 | C | Open | Decoded entries can be exported as newline-delimited JSON for bulk load into Elasticsearch. |
+| FR-INT-1 | C | Done | Decoded entries can be exported as newline-delimited JSON for bulk load into Elasticsearch. |
 | FR-INT-2 | C | Open | Megalog integration. The Megalog interface must be defined before this can be specified. |
 
 ## 4. Non-functional requirements
