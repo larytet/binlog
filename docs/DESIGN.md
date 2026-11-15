@@ -270,8 +270,10 @@ the timestamp, index and source position when present.
 
 ## 9. Later work (could-have)
 
-- **Sorting (FR-SORT-1)**: a decoder-side k-way merge over several streams by timestamp or
-  index, with a bounded window.
+- **Sorting (FR-SORT-1)** - done: `binlog.Merge(sources, key, window, emit)` reads the sources in turn into
+  a bounded buffer (a min-heap) and emits the smallest entry when it is full. Streams that are each in order
+  merge exactly with a window equal to their number; late entries are emitted anyway and counted. In
+  `binlogdump`: `-sort timestamp|index -window N` over several stream files (all with the same optional fields).
 - **Compression (FR-COMP-1)**: compress the FIFO's output per block in the consumer
   goroutine, never on the hot path. The block carries a length and an algorithm id.
 - **Elasticsearch (FR-INT-1)** - done: `binlogdump -format ndjson` emits one JSON object per entry,

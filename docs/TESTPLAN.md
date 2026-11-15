@@ -132,7 +132,7 @@ implementation task that makes the case pass. Cases for existing behaviour pass 
 
 Cases are written when the feature is scheduled. Placeholders:
 
-- FR-SORT-1: merge of three streams with out-of-order timestamps inside and outside the window.
+- FR-SORT-1: done: `TestMerge*` (three streams, windows, index, errors) and `TestTC_SORT_1_BinlogdumpMerge`.
 - FR-COMP-1: round trip for each algorithm, corrupt block returns an error.
 - FR-INT-1: done: `TestFormatJSON`, `TestTC_INT_1_ElasticsearchBulk`.
 

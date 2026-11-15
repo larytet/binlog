@@ -68,6 +68,9 @@ binlogdump ./myservice service.binlog          # stream with a header
 binlogdump -flags 8 ./myservice service.binlog # stream without a header: 8 = timestamps
 ```
 
+Several streams can be given. `-sort timestamp` or `-sort index` merges them into one list in that order
+(`-window N` is the number of entries held back, see `binlog.Merge`), for example the logs of several processes.
+
 `-format ndjson` prints one JSON object per entry, and `-format es-bulk -index NAME` adds the Elasticsearch bulk
 action line, so that the output can be sent to `_bulk` as it is.
 
@@ -180,7 +183,7 @@ requirement.
 
 Open:
 
-* Run-time sorting of the entries of several streams, and compression of the stream.
+* Compression of the stream.
 * Integration with Megalog (its interface is not defined yet).
 * The speed on the benchmark machine is 3 to 4 times slower than the numbers at the top (older, faster
   hardware). `docs/BENCH.md` has the current baseline. The FIFO write path is about 40 ns slower than

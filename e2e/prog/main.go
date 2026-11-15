@@ -124,6 +124,9 @@ func main() {
 	logCase("string-70000", "huge ["+huge+"]", func() error { return logger.Log("huge [%s]", huge) })
 	logCase("string-and-int", "who bob 42", func() error { return logger.Log("who %s %d", "bob", 42) })
 
+	// the entries so far have constant format strings: an offline table can decode them
+	staticStream := append([]byte(nil), stream.Bytes()...)
+
 	dyn := fmt.Sprintf("%s %%d", "dynamic")
 	logCase("l2-cache", "dynamic 5", func() error { return logger.Log(dyn, 5) })
 	logCase("l2-cache-again", "dynamic 6", func() error { return logger.Log(dyn, 6) })
@@ -146,4 +149,5 @@ func main() {
 	write("errors.txt", errs.Bytes())
 	write("hashes.txt", hashes.Bytes())
 	write("stream.bin", stream.Bytes())
+	write("stream-static.bin", staticStream)
 }

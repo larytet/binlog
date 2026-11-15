@@ -91,7 +91,7 @@ Out of scope: a network log transport, log rotation, and an interactive viewer.
 
 | ID | Pri | Status | Requirement |
 |---|---|---|---|
-| FR-SORT-1 | C | Open | Entries from several loggers can be sorted by timestamp or index within a configurable window. |
+| FR-SORT-1 | C | Done | Entries from several loggers can be sorted by timestamp or index within a configurable window. |
 | FR-COMP-1 | C | Open | Blocks of the stream can be compressed and decompressed, with the algorithm selectable. |
 
 ### 3.7 Integrations

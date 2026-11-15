@@ -644,3 +644,65 @@ func TestTC_INT_1_ElasticsearchBulk(t *testing.T) {
 		t.Fatalf("%d documents in %d lines", docs, len(lines))
 	}
 }
+
+// TC-SORT-1 (FR-SORT-1): binlogdump -sort index merges two streams of the same program.
+// Both start their index at 1, so the merged list has every entry twice, in index order.
+func TestTC_SORT_1_BinlogdumpMerge(t *testing.T) {
+	dump := filepath.Join(buildDir, "binlogdump")
+	if out, err := exec.Command("go", "build", "-o", dump, "../cmd/binlogdump").CombinedOutput(); err != nil {
+		t.Fatalf("go build binlogdump: %v\n%s", err, out)
+	}
+	exe := build(t, "default")
+	dirA, dirB := run(t, "default", 4), run(t, "default", 4)
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command(dump, "-flags", "4", "-sort", "index", "-window", "2", "-format", "ndjson",
+		exe, filepath.Join(dirA, "stream-static.bin"), filepath.Join(dirB, "stream-static.bin"))
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("%v: %s", err, stderr.String())
+	}
+	names, _ := readTable(t, filepath.Join(dirA, "expected.txt"))
+	lines := strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n")
+	static := 0
+	for _, n := range names {
+		if strings.HasPrefix(n, "l2-cache") {
+			break
+		}
+		static++
+	}
+	if len(lines) != 2*static {
+		t.Fatalf("%d lines, want %d", len(lines), 2*static)
+	}
+	for i, line := range lines {
+		var doc struct {
+			Index   int    `json:"index"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal([]byte(line), &doc); err != nil {
+			t.Fatalf("line %d: %v", i, err)
+		}
+		if doc.Index != i/2+1 {
+			t.Fatalf("line %d has index %d, want %d", i, doc.Index, i/2+1)
+		}
+		if i%2 == 1 {
+			var prev struct {
+				Message string `json:"message"`
+			}
+			json.Unmarshal([]byte(lines[i-1]), &prev)
+			if prev.Message != doc.Message {
+				t.Fatalf("lines %d and %d are the same entry of two runs: %q vs %q", i-1, i, shorten(prev.Message), shorten(doc.Message))
+			}
+		}
+	}
+	// streams with different optional fields (told by their headers) cannot be merged
+	dirH1, dirH2 := t.TempDir(), t.TempDir()
+	for dir, flags := range map[string]string{dirH1: "4", dirH2: "12"} {
+		if out, err := exec.Command(exe, "-flags", flags, "-header", "-dir", dir).CombinedOutput(); err != nil {
+			t.Fatalf("%v\n%s", err, out)
+		}
+	}
+	cmd = exec.Command(dump, "-sort", "index", exe, filepath.Join(dirH1, "stream-static.bin"), filepath.Join(dirH2, "stream-static.bin"))
+	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "other optional fields") {
+		t.Errorf("different flags: %v %s", err, out)
+	}
+}

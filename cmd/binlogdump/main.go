@@ -1,12 +1,16 @@
 // Command binlogdump prints a binary log as text.
 //
-//	binlogdump [-flags N] [-format text|ndjson|es-bulk] [-index NAME] EXECUTABLE STREAM
+//	binlogdump [-flags N] [-format text|ndjson|es-bulk] [-index NAME] [-sort timestamp|index [-window N]] EXECUTABLE STREAM...
 //
 // EXECUTABLE is the Go program that wrote the stream, and its sources must be on this machine:
 // the format strings and argument types are read from them. STREAM is a file or - for stdin.
 // A stream that starts with a header (see binlog.Binlog.WriteHeader) describes itself.
 // For a stream without a header give -flags: the sum of 1 string index, 2 source line,
 // 4 log index and 8 timestamp.
+//
+// Several streams are printed one after the other. With -sort they are merged into one list
+// ordered by timestamp or index, see binlog.Merge for the meaning of -window. All streams must
+// have the optional fields that the key needs.
 //
 // -format ndjson prints one JSON object per entry. -format es-bulk puts the action line of the
 // Elasticsearch bulk API before every object (-index names the index); pipe it to
@@ -36,6 +40,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	flags := fs.Int("flags", 0, "optional fields of a stream without a header: 1 string index, 2 source line, 4 log index, 8 timestamp")
 	formatName := fs.String("format", "text", "output format: text, ndjson or es-bulk")
 	index := fs.String("index", "binlog", "Elasticsearch index name for -format es-bulk")
+	sortName := fs.String("sort", "", "merge the streams ordered by timestamp or index")
+	window := fs.Int("window", 1024, "entries held back for sorting, 0 for no limit (the whole input in memory)")
 	verbose := fs.Bool("v", false, "report calls of the sources that could not be analysed")
 	if err := fs.Parse(args); err != nil {
 		return 2
@@ -46,11 +52,17 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "binlogdump: unknown format %q, use text, ndjson or es-bulk\n", *formatName)
 		return 2
 	}
-	if fs.NArg() != 2 {
-		fmt.Fprintln(stderr, "usage: binlogdump [-flags N] [-v] EXECUTABLE STREAM")
+	switch *sortName {
+	case "", "timestamp", "index":
+	default:
+		fmt.Fprintf(stderr, "binlogdump: unknown sort key %q, use timestamp or index\n", *sortName)
 		return 2
 	}
-	executable, streamName := fs.Arg(0), fs.Arg(1)
+	if fs.NArg() < 2 {
+		fmt.Fprintln(stderr, "usage: binlogdump [-flags N] [-format F] [-sort KEY -window N] [-v] EXECUTABLE STREAM...")
+		return 2
+	}
+	executable := fs.Arg(0)
 
 	table, err := ast.LoadTable(executable)
 	if err != nil {
@@ -66,46 +78,42 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 
-	var in io.Reader = stdin
-	if streamName != "-" {
-		f, err := os.Open(streamName)
-		if err != nil {
-			fmt.Fprintf(stderr, "binlogdump: %v\n", err)
-			return 1
+	var sources []binlog.Source
+	for _, name := range fs.Args()[1:] {
+		var in io.Reader = stdin
+		if name != "-" {
+			f, err := os.Open(name)
+			if err != nil {
+				fmt.Fprintf(stderr, "binlogdump: %v\n", err)
+				return 1
+			}
+			defer f.Close()
+			in = f
 		}
-		defer f.Close()
-		in = f
+		reader := bufio.NewReader(in)
+		streamFlags := binlog.Flags(*flags)
+		if head, err := reader.Peek(len(binlog.StreamMagic)); err == nil && string(head) == binlog.StreamMagic {
+			if streamFlags, err = binlog.ReadHeader(reader); err != nil {
+				fmt.Fprintf(stderr, "binlogdump: %s: %v\n", name, err)
+				return 1
+			}
+		}
+		sources = append(sources, binlog.Source{Reader: reader, Table: table.Handlers, Files: table.Files, Flags: streamFlags})
 	}
-	reader := bufio.NewReader(in)
+
 	out := bufio.NewWriter(stdout)
 	defer out.Flush()
-
-	streamFlags := binlog.Flags(*flags)
-	if head, err := reader.Peek(len(binlog.StreamMagic)); err == nil && string(head) == binlog.StreamMagic {
-		if streamFlags, err = binlog.ReadHeader(reader); err != nil {
-			fmt.Fprintf(stderr, "binlogdump: %v\n", err)
-			return 1
-		}
-	}
-
-	for count := 1; ; count++ {
-		entry, err := binlog.DecodeNextFlags(reader, table.Handlers, table.Files, streamFlags)
-		if err == io.EOF {
-			return 0
-		}
-		if err != nil {
-			out.Flush()
-			fmt.Fprintf(stderr, "binlogdump: entry %d: %v\n", count, err)
-			return 1
-		}
+	count := 0
+	var failure error
+	print := func(entry *binlog.LogEntry, streamFlags binlog.Flags) error {
+		count++
 		switch *formatName {
 		case "text":
 			fmt.Fprintln(out, format(entry, streamFlags))
 		default:
 			line, err := formatJSON(entry, streamFlags)
 			if err != nil {
-				fmt.Fprintf(stderr, "binlogdump: entry %d: %v\n", count, err)
-				return 1
+				return err
 			}
 			if *formatName == "es-bulk" {
 				action, _ := json.Marshal(map[string]map[string]string{"index": {"_index": *index}})
@@ -113,7 +121,47 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			}
 			fmt.Fprintf(out, "%s\n", line)
 		}
+		return nil
 	}
+
+	if *sortName != "" {
+		for i, source := range sources {
+			if source.Flags != sources[0].Flags {
+				fmt.Fprintf(stderr, "binlogdump: stream %d has other optional fields than stream 0, they cannot be merged\n", i)
+				return 1
+			}
+		}
+		key := binlog.SortByTimestamp
+		if *sortName == "index" {
+			key = binlog.SortByIndex
+		}
+		stats, err := binlog.Merge(sources, key, *window, func(e *binlog.LogEntry) error { return print(e, sources[0].Flags) })
+		if stats.Late != 0 {
+			fmt.Fprintf(stderr, "binlogdump: %d entries arrived too late for the window of %d and are out of order\n", stats.Late, *window)
+		}
+		failure = err
+	} else {
+		for _, source := range sources {
+			for failure == nil {
+				var entry *binlog.LogEntry
+				entry, err := binlog.DecodeNextFlags(source.Reader, source.Table, source.Files, source.Flags)
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					failure = fmt.Errorf("entry %d: %v", count+1, err)
+					break
+				}
+				failure = print(entry, source.Flags)
+			}
+		}
+	}
+	if failure != nil {
+		out.Flush()
+		fmt.Fprintf(stderr, "binlogdump: %v\n", failure)
+		return 1
+	}
+	return 0
 }
 
 // format prints the optional fields that the stream has, then the formatted text
