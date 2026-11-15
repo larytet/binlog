@@ -1209,3 +1209,72 @@ func TestLongString(t *testing.T) {
 		t.Fatalf("decoded %d bytes", len(got))
 	}
 }
+
+type recordingControl struct{ events []string }
+
+func (r *recordingControl) FrameStart(io.Writer) { r.events = append(r.events, "start") }
+func (r *recordingControl) FrameEnd(io.Writer)   { r.events = append(r.events, "end") }
+
+// failingWriter fails the Nth Write (counting from 1) and every one after it
+type failingWriter struct{ n, calls int }
+
+func (w *failingWriter) Write(p []byte) (int, error) {
+	w.calls++
+	if w.calls >= w.n {
+		return 0, fmt.Errorf("disk full")
+	}
+	return len(p), nil
+}
+
+// TC-LOG-4 (FR-LOG-5): FrameStart and FrameEnd surround every entry
+func TestFrameCallbacks(t *testing.T) {
+	var buf bytes.Buffer
+	ctl := &recordingControl{}
+	base, size := GetSelfTextAddressSize()
+	b := Init(&buf, ctl, base, size)
+	for i := 0; i < 3; i++ {
+		if err := b.Log("frame %d", i); err != nil {
+			t.Fatalf("%v", err)
+		}
+	}
+	if got := strings.Join(ctl.events, ","); got != "start,end,start,end,start,end" {
+		t.Fatalf("events %s", got)
+	}
+}
+
+// TC-LOG-9 (D1): a write error is returned and the frame is still closed
+func TestWriteErrorReturned(t *testing.T) {
+	for n := 1; n <= 2; n++ { // the hash write, then the argument write
+		ctl := &recordingControl{}
+		base, size := GetSelfTextAddressSize()
+		b := Init(&failingWriter{n: n}, ctl, base, size)
+		if err := b.Log("fail %d", 5); err == nil {
+			t.Fatalf("failing Write #%d: Log returned nil", n)
+		}
+		if got := strings.Join(ctl.events, ","); got != "start,end" {
+			t.Fatalf("failing Write #%d: events %s", n, got)
+		}
+	}
+}
+
+// TC-LOG-8, TC-LOG-10 (FR-LOG-9, D9): bad calls return an error, write nothing, are not cached
+func TestBadCallsWriteNothing(t *testing.T) {
+	var buf bytes.Buffer
+	base, size := GetSelfTextAddressSize()
+	b := Init(&buf, &WriterControlDummy{}, base, size)
+	if err := b.Log("verb %v", 1); err == nil {
+		t.Fatalf("%%v must be rejected")
+	}
+	if err := b.Log("verb %p", 1); err == nil {
+		t.Fatalf("%%p must be rejected")
+	}
+	if err := b.Log("two %d %d", 1); err == nil {
+		t.Fatalf("missing argument must be rejected")
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("%d bytes written by rejected calls", buf.Len())
+	}
+	if len(b.handlersLookupByHash) != 0 {
+		t.Fatalf("a rejected call was cached")
+	}
+}

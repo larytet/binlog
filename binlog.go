@@ -183,7 +183,10 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 		return fmt.Errorf("Number of args %d does not match log line %d", len(args), len(hArgs))
 	}
 	b.config.WriterControl.FrameStart(b.config.IOWriter)
-	b.config.IOWriter.Write(h.hash)
+	var writeErr error
+	if _, err := b.config.IOWriter.Write(h.hash); err != nil {
+		writeErr = fmt.Errorf("Failed to write the hash: %v", err)
+	}
 
 	if SEND_STRING_INDEX {
 		b.config.IOWriter.Write(h.index)
@@ -206,15 +209,18 @@ func (b *Binlog) Log(fmtStr string, args ...interface{}) error {
 	}
 
 	for i, arg := range args {
+		if writeErr != nil {
+			break
+		}
 		hArg := h.Args.args[i]
 		writer := hArg.writer
 		if err := b.writeArgumentToOutput(writer, arg); err != nil {
-			err = fmt.Errorf("Failed to write value %v", err)
-			break
+			writeErr = fmt.Errorf("Failed to write value %v", err)
 		}
 	}
+	// FrameEnd is called even after a failure, a shared writer must not stay mid-frame
 	b.config.WriterControl.FrameEnd(b.config.IOWriter)
-	return err
+	return writeErr
 }
 
 type LogEntry struct {

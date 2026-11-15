@@ -60,7 +60,7 @@ These drive the planned work.
 
 | # | Observation | Effect | Planned in |
 |---|---|---|---|
-| D1 | In `Log()` the argument loop declares `err :=` inside the `if`, so the later `err = fmt.Errorf(...)` is lost. | A failed argument write is reported as success. | 8.1 |
+| D1 | In `Log()` the argument loop declares `err :=` inside the `if`, so the later `err = fmt.Errorf(...)` is lost. | A failed argument write is reported as success. | fixed |
 | D2 | A handler records the argument types of the first call only. | A second call with the same address and other types is decoded wrongly. | 5 |
 | D3 | File hash and line are 16 bits each. | Collisions between files, and no support for files over 65535 lines. | 5 |
 | D4 | `ast.GetIndexTable` returns `nil, nil, nil`. | No offline decoding. | 5 |
