@@ -23,7 +23,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 
-	"github.com/larytet-go/moduledata"
 	"github.com/valyala/fasthttp"
 )
 
@@ -50,24 +49,6 @@ func TestStringDedup(t *testing.T) {
 	}
 }
 
-func executableContains(filename string, moduleName string) (bool, error) {
-	filename, err := os.Executable()
-	if err != nil {
-		return false, err
-	}
-	if modules, err := moduledata.GetModules(filename); err == nil {
-		for _, m := range modules {
-			if strings.HasSuffix(m, moduleName) {
-				return true, nil
-			}
-		}
-		return false, nil
-	} else {
-		return false, err
-	}
-
-}
-
 func TestGetStrings(t *testing.T) {
 	filename, err := os.Executable()
 	if err != nil {
@@ -89,23 +70,6 @@ func TestGetStrings(t *testing.T) {
 	_, err = sectionRodata.Data()
 	if err != nil {
 		t.Fatalf("%v", err)
-	}
-}
-
-// Test if I can fetch the module names from the ELF file in this
-// environment
-func T1estGetModules(t *testing.T) {
-	filename, err := os.Executable()
-	if err != nil {
-		t.Fatalf("%v", err)
-	}
-	modulename := "binlog_test.go"
-	contains, err := executableContains(filename, modulename)
-	if err != nil {
-		t.Fatalf("%v", err)
-	}
-	if !contains {
-		t.Logf("Module %s not found in %s", modulename, filename)
 	}
 }
 

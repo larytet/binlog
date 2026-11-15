@@ -77,13 +77,13 @@ Out of scope: a network log transport, log rotation, and an interactive viewer.
 | ID | Pri | Status | Requirement |
 |---|---|---|---|
 | FR-DEC-1 | M | Done | `DecodeNext` decodes an entry from a stream given an index table. |
-| FR-DEC-2 | M | Open | `ast.GetIndexTable(executable)` returns the real index table. Today it returns `nil, nil, nil`, and its input reader `moduledata.GetModules` crashes on current executables (D14). |
-| FR-DEC-3 | M | Open | The decoder finds every `binlog.Log` call in the Go sources the executable was built from. It reads the module paths from the executable. |
-| FR-DEC-4 | M | Open | Handlers use the hash that the runtime computes, so offline and online hashes match for the same string. |
-| FR-DEC-5 | M | Open | Argument types come from type information, not from AST node types. `uint32(10)` and `uint64(10)` in two calls with the same text decode correctly. |
-| FR-DEC-6 | M | Open | Calls are identified by file and line, so that duplicate format strings do not collide. |
-| FR-DEC-7 | S | Open | An import alias or a method receiver other than `binlog` is resolved by type, not by name. |
-| FR-DEC-8 | S | Open | Calls with an unsupported argument expression are reported with file and line, not dropped silently. |
+| FR-DEC-2 | M | Done | `ast.GetIndexTable(executable)` returns the real index table. It reads the Go file table of the executable and the sources on this machine (ELF only). |
+| FR-DEC-3 | M | Done | The decoder finds every `binlog.Log` call in the Go sources the executable was built from. It reads the module paths from the executable. |
+| FR-DEC-4 | M | Done | Handlers use the hash that the runtime computes, so offline and online hashes match for the same string. |
+| FR-DEC-5 | M | Done | Argument types come from type information, not from AST node types. `uint32(10)` and `uint64(10)` in two calls with the same text decode correctly. |
+| FR-DEC-6 | M | Done | Calls are identified by file and line, so that duplicate format strings do not collide. |
+| FR-DEC-7 | S | Done | An import alias or a method receiver other than `binlog` is resolved by type, not by name. |
+| FR-DEC-8 | S | Done | Calls with an unsupported argument expression are reported with file and line, not dropped silently. |
 | FR-DEC-9 | C | Open | Decoding from the ELF `.rodata` alone, without sources. |
 | FR-DEC-10 | S | Open | A command-line decoder prints a binary stream as text, given a stream file and the executable. |
 

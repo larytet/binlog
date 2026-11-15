@@ -155,9 +155,8 @@ a reason, and none fails.
 
 `go test ./e2e/...` runs the sample program in 2 build modes x 16 flag combinations x 26 cases.
 Known failures are listed in `knownBroken` in `e2e/e2e_test.go`, each with its requirement.
-The list is empty since D10 to D13 were fixed. The offline
-cases (TC-DEC-*) skip behind `offlineDecoderReady`, because the stub returns nothing and its
-dependency crashes (D14). TC-DEC-3 to 8 and TC-FIFO-9 are placeholders until their features.
+The list is empty since D10 to D13 were fixed. TC-DEC-1 to 7 and 9 are implemented (F4 done). TC-DEC-8 and TC-FIFO-9 are placeholders until
+their features.
 
 ## 5. Task map
 

@@ -61,10 +61,10 @@ These drive the planned work.
 | # | Observation | Effect | Planned in |
 |---|---|---|---|
 | D1 | In `Log()` the argument loop declares `err :=` inside the `if`, so the later `err = fmt.Errorf(...)` is lost. | A failed argument write is reported as success. | fixed |
-| D2 | A handler records the argument types of the first call only. | A second call with the same address and other types is decoded wrongly. | 5 |
-| D3 | File hash and line are 16 bits each. | Collisions between files, and no support for files over 65535 lines. | 5 |
-| D4 | `ast.GetIndexTable` returns `nil, nil, nil`. | No offline decoding. | 5 |
-| D5 | `ast` records `reflect.TypeOf(astNode)`, which is the AST node type. | The recorded types are meaningless. | 5 |
+| D2 | A handler records the argument types of the first call only. | A second call with the same address and other types is decoded wrongly. | fixed |
+| D3 | File hash and line are 16 bits each. | Collisions between files, and no support for files over 65535 lines. | fixed |
+| D4 | `ast.GetIndexTable` returns `nil, nil, nil`. | No offline decoding. | fixed |
+| D5 | `ast` records `reflect.TypeOf(astNode)`, which is the AST node type. | The recorded types are meaningless. | fixed |
 | D6 | `Fifo.WriteIntegral` writes one byte and ignores `count`. | The FIFO cannot hold 2, 4 or 8 byte values. | 6 |
 | D7 | The stream flags are global variables and the stream is unversioned. | A stream cannot be decoded without knowing the writer's flags. | fixed (`WriteHeader`, `ReadHeader`, `DecodeNextFlags`) |
 | D8 | There is no `go.mod`, and `ast` imports `"binlog"`. | `go test ./...` does not run. | 3 |
@@ -72,7 +72,7 @@ These drive the planned work.
 | D11 | `DecodeNext` reads every integer as `uint64`, and `appendArg` switches on that value's type, not on the handler's `argType`. | `int8(-128)` decodes as 128 and `int(-10)` as 18446744073709551606. | fixed |
 | D12 | `readStringFromReader` and `readIntegerFromReader` treat a zero-byte read as EOF. | An empty string argument fails to decode with "EOF". | fixed |
 | D13 | The string length prefix is 16 bits. | A string of 70000 bytes is written truncated and decodes to the wrong text. | fixed |
-| D14 | `moduledata.GetModules` dereferences a nil pointer on executables built by Go 1.27 (SIGSEGV, not recoverable). | `GetIndexTable` cannot be used on a current executable at all. | 5 |
+| D14 | `moduledata.GetModules` dereferences a nil pointer on executables built by Go 1.27 (SIGSEGV, not recoverable). | `GetIndexTable` cannot be used on a current executable at all. | fixed |
 | D15 | `parseLogLine` indexes `args[argIndex]` for each verb. | Fewer arguments than verbs panics (found by reading, not yet reproduced). | fixed |
 | D16 | The L1 index is `address/8`, but literals are not aligned in the executable. Two short literals can share a slot. | The second call reuses the first one's handler and logs the wrong hash and arguments. Found when a layout change made `uint %d` and `int8 %d` collide. | fixed: a hit needs `Handler.Address` to equal the literal's address |
 | D9 | `Handler.Args.args` is indexed by `args` length checked at call time only. | Error on mismatch, but only after the handler is cached from a bad first call. | 4 |
@@ -121,7 +121,13 @@ Argument encodings, added to the existing ones:
 | `float64` | `%f %e %g` | 8 bytes, IEEE 754 bits |
 | `rune` / `int32` | `%c` | 4 bytes |
 
-## 5. Offline index table (FR-DEC-2 to FR-DEC-8, D2 to D5)
+## 5. Offline index table (FR-DEC-2 to FR-DEC-8, D2 to D5) - implemented
+
+Implemented in `ast/ast.go`: `GetIndexTable`, `LoadTable` (returns `Table` with `Handlers`, `Files`, `Sites`,
+`Conflicts`, `Diagnostics`) and `LoadSources`. Differences from the plan below: the executable's file table is
+read with `debug/gosym`; the stream's running string index is not known offline, so `DecodeNext` skips the index
+check when the handler's `IndexUint` is zero; `Tests: true` is set so that calls in `_test.go` files are seen;
+the runtime logger itself still does not detect same-text-different-type calls (D2 is detected offline only).
 
 ### 5.1 Pipeline
 

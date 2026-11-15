@@ -345,8 +345,9 @@ func DecodeNextFlags(reader io.Reader, indexTable map[uint32]*Handler, filenames
 	if flags&FlagStringIndex != 0 {
 		// Read format string index
 		if index, err := readIntegerFromReader(reader, 4); err == nil {
-			if uint32(index) != h.IndexUint {
-				return nil, fmt.Errorf("Mismatch of the format string index: %d instead of %d", index, h.index)
+			// The offline table cannot know the running index, it leaves IndexUint zero
+			if h.IndexUint != 0 && uint32(index) != h.IndexUint {
+				return nil, fmt.Errorf("Mismatch of the format string index: %d instead of %d", index, h.IndexUint)
 			}
 		} else {
 			return nil, fmt.Errorf("Failed to read format string index err=%v", err)
@@ -559,6 +560,52 @@ func md5sum(s string) uint32 {
 	return hash
 }
 
+// FormatHash returns the hash of a format string, the first field of every entry in the stream.
+// The offline decoder uses the same function, so the two cannot drift apart.
+func FormatHash(fmtStr string) uint32 {
+	return md5sum(fmtStr)
+}
+
+// FilenameHash returns the 16 bit hash of a source file name (ADD_SOURCE_LINE)
+func FilenameHash(filename string) uint16 {
+	return uint16(md5sum(filename))
+}
+
+// NewHandler builds the handler of a format string given the types of the arguments,
+// without calling Log(). The offline decoder uses it to build the index table from the sources.
+func NewHandler(fmtStr string, argTypes []reflect.Type) (*Handler, error) {
+	args := make([]interface{}, len(argTypes))
+	for i, t := range argTypes {
+		args[i] = reflect.Zero(t).Interface()
+	}
+	var h Handler
+	h.Args.fmtString = fmtStr
+	var err error
+	if h.Args.args, err = parseLogLine(fmtStr, args); err != nil {
+		return nil, err
+	}
+	if len(h.Args.args) != len(args) {
+		return nil, fmt.Errorf("Number of args %d does not match the format string %s", len(args), fmtStr)
+	}
+	h.HashUint = FormatHash(fmtStr)
+	h.hash = intToSlice(&h.HashUint)
+	return &h, nil
+}
+
+// ArgKinds returns the kinds of the arguments of the handler
+func (h *Handler) ArgKinds() []reflect.Kind {
+	kinds := make([]reflect.Kind, len(h.Args.args))
+	for i, a := range h.Args.args {
+		kinds[i] = a.decodeArg.argKind
+	}
+	return kinds
+}
+
+// FmtString returns the format string of the handler
+func (h *Handler) FmtString() string {
+	return h.Args.fmtString
+}
+
 func intToSlice(v interface{}) []byte {
 	var bufHash bytes.Buffer
 	binary.Write(&bufHash, binary.LittleEndian, v)
@@ -643,7 +690,7 @@ func (b *Binlog) getHandler(fmtStr string, args []interface{}) (*Handler, error)
 		// Caller(0) is this function, Caller(1) is Log()
 		_, filename, line, ok := runtime.Caller(2)
 		if ok {
-			filenameHash = uint16(md5sum(filename))
+			filenameHash = FilenameHash(filename)
 			fileLine = uint16(line)
 		}
 		h.FilenameHashUint = filenameHash

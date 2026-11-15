@@ -7,21 +7,23 @@
 package e2e
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/larytet/binlog"
 	"github.com/larytet/binlog/ast"
 )
 
-// offlineDecoderReady gates the tests that call ast.GetIndexTable. The function is a stub
-// today, and its dependency moduledata.GetModules crashes the process (SIGSEGV) on
-// executables built by current Go (D14). F4 replaces it and sets this to true.
-const offlineDecoderReady = false
+// offlineDecoderReady gates the tests that call ast.GetIndexTable. It was false until the
+// offline decoder (FR-DEC-2) was implemented, and stays as a switch for platforms without it.
+const offlineDecoderReady = true
 
 // knownBroken lists the cases of the sample program that fail today, with the requirement
 // the fix belongs to. Remove an entry in the commit that fixes it.
@@ -223,14 +225,181 @@ func TestTC_DEC_9_BadExecutable(t *testing.T) {
 // Cases below need sample programs that are written together with the feature.
 // They are placeholders that keep the test plan visible in `go test -v`.
 
-func TestTC_DEC_3_Conflicts(t *testing.T)   { t.Skip("FR-DEC-5: write with the offline decoder (F4)") }
-func TestTC_DEC_4_FileAndLine(t *testing.T) { t.Skip("FR-DEC-6: write with the offline decoder (F4)") }
-func TestTC_DEC_5_AliasAndWrappers(t *testing.T) {
-	t.Skip("FR-DEC-7: write with the offline decoder (F4)")
-}
-func TestTC_DEC_6_Diagnostics(t *testing.T) { t.Skip("FR-DEC-8: write with the offline decoder (F4)") }
-func TestTC_DEC_7_ConstantExpression(t *testing.T) {
-	t.Skip("FR-DEC-3: write with the offline decoder (F4)")
-}
 func TestTC_DEC_8_Binlogdump(t *testing.T)      { t.Skip("FR-DEC-10: write with the decoder command (F5)") }
 func TestTC_FIFO_9_LoggerOverFifo(t *testing.T) { t.Skip("FR-CONC-2: write with the FIFO (F6)") }
+
+// marks returns the line of every "// MARK: name" comment of the progdec source
+func marks(t *testing.T) (file string, lines map[string]int) {
+	t.Helper()
+	file, err := filepath.Abs("progdec/main.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines = map[string]int{}
+	for i, line := range strings.Split(string(data), "\n") {
+		if _, name, ok := strings.Cut(line, "// MARK: "); ok {
+			lines[strings.TrimSpace(name)] = i + 1
+		}
+	}
+	return file, lines
+}
+
+func loadProgdec(t *testing.T) *ast.Table {
+	t.Helper()
+	exe := filepath.Join(buildDir, "progdec")
+	if out, err := exec.Command("go", "build", "-o", exe, "./progdec").CombinedOutput(); err != nil {
+		t.Fatalf("go build progdec: %v\n%s", err, out)
+	}
+	table, err := ast.LoadTable(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return table
+}
+
+func tableHas(table *ast.Table, fmtStr string) bool {
+	h := table.Handlers[binlog.FormatHash(fmtStr)]
+	return h != nil && h.FmtString() == fmtStr
+}
+
+// TC-DEC-2 (FR-DEC-1, FR-DEC-4, D7): the stream of the sample program decodes with the
+// table built from its sources and equals the text the program computed itself
+func TestTC_DEC_2_OfflineDecode(t *testing.T) {
+	if !offlineDecoderReady {
+		t.Skip("FR-DEC-2")
+	}
+	exe := build(t, "default")
+	table, err := ast.LoadTable(exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for flags := 0; flags < 16; flags++ {
+		flags := flags
+		t.Run(fmt.Sprintf("flags=%04b", flags), func(t *testing.T) {
+			dir := run(t, "default", flags)
+			names, expected := readTable(t, filepath.Join(dir, "expected.txt"))
+			stream, err := os.ReadFile(filepath.Join(dir, "stream.bin"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			reader := bytes.NewReader(stream)
+			decoded := 0
+			for _, name := range names {
+				if strings.HasPrefix(name, "l2-cache") {
+					break // built at run time: not in the sources
+				}
+				entry, err := binlog.DecodeNextFlags(reader, table.Handlers, table.Files, binlog.Flags(flags))
+				if err != nil {
+					t.Fatalf("%s: %v", name, err)
+				}
+				want, _ := strconv.Unquote(expected[name])
+				if got := fmt.Sprintf(entry.FmtString, entry.Args...); got != want {
+					t.Fatalf("%s: decoded %s, want %s", name, shorten(got), shorten(want))
+				}
+				if flags&2 != 0 && (entry.Filename == "" || entry.LineNumber == 0) {
+					t.Errorf("%s: no source position (%q:%d)", name, entry.Filename, entry.LineNumber)
+				}
+				decoded++
+			}
+			if decoded == 0 {
+				t.Fatal("nothing decoded")
+			}
+		})
+	}
+}
+
+// TC-DEC-3 (FR-DEC-5): same text with other types is a conflict, same text and types is one entry
+func TestTC_DEC_3_Conflicts(t *testing.T) {
+	table := loadProgdec(t)
+	file, lines := marks(t)
+	var found *ast.Conflict
+	for i, c := range table.Conflicts {
+		if len(c.Texts) > 0 && c.Texts[0] == "dup %d" {
+			found = &table.Conflicts[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("no conflict for \"dup %%d\", conflicts: %+v", table.Conflicts)
+	}
+	want := map[ast.Site]bool{{File: file, Line: lines["dup32"]}: true, {File: file, Line: lines["dup64"]}: true}
+	for _, s := range found.Sites {
+		delete(want, s)
+	}
+	if len(want) != 0 {
+		t.Errorf("conflict sites %v miss %v", found.Sites, want)
+	}
+	for _, c := range table.Conflicts {
+		if c.Texts[0] == "same %d" {
+			t.Errorf("\"same %%d\" with equal types is reported as a conflict")
+		}
+	}
+	if !tableHas(table, "same %d") {
+		t.Errorf("\"same %%d\" is missing")
+	}
+}
+
+// TC-DEC-4 (FR-DEC-6): calls carry their file and line
+func TestTC_DEC_4_FileAndLine(t *testing.T) {
+	table := loadProgdec(t)
+	file, lines := marks(t)
+	for _, c := range []struct{ mark, text string }{{"alias", "alias %d"}, {"field", "field %s"}, {"same1", "same %d"}, {"same2", "same %d"}} {
+		found := false
+		for _, s := range table.Sites[binlog.FormatHash(c.text)] {
+			found = found || s == ast.Site{File: file, Line: lines[c.mark]}
+		}
+		if !found {
+			t.Errorf("%s: site %s:%d not recorded, have %v", c.mark, file, lines[c.mark], table.Sites[binlog.FormatHash(c.text)])
+		}
+	}
+	h := table.Handlers[binlog.FormatHash("alias %d")]
+	if h == nil || int(h.LineNumberUint) != lines["alias"] || table.Files[h.FilenameHashUint] != file {
+		t.Errorf("handler position is not file %s line %d: %+v", file, lines["alias"], h)
+	}
+}
+
+// TC-DEC-5 (FR-DEC-7): the logger is found by type under an import alias and in a struct
+// field, and a Log method of another type is ignored
+func TestTC_DEC_5_AliasAndWrappers(t *testing.T) {
+	table := loadProgdec(t)
+	for _, text := range []string{"alias %d", "field %s"} {
+		if !tableHas(table, text) {
+			t.Errorf("%q not found", text)
+		}
+	}
+	if tableHas(table, "other %d") {
+		t.Errorf("a Log method of another type was treated as binlog")
+	}
+}
+
+// TC-DEC-6 (FR-DEC-8): calls that cannot be analysed are reported with file and line
+func TestTC_DEC_6_Diagnostics(t *testing.T) {
+	table := loadProgdec(t)
+	file, lines := marks(t)
+	for _, mark := range []string{"nonconst", "iface", "spread"} {
+		found := false
+		for _, d := range table.Diagnostics {
+			found = found || d.Site == ast.Site{File: file, Line: lines[mark]}
+		}
+		if !found {
+			t.Errorf("no diagnostic for %s at line %d; have %v", mark, lines[mark], table.Diagnostics)
+		}
+	}
+}
+
+// TC-DEC-7 (FR-DEC-3): constant expressions are evaluated, floats and runes are typed
+func TestTC_DEC_7_ConstantExpression(t *testing.T) {
+	table := loadProgdec(t)
+	for _, text := range []string{"a b %d", "const-%d", "float %g %c", "typed %d"} {
+		if !tableHas(table, text) {
+			t.Errorf("%q not found", text)
+		}
+	}
+	h := table.Handlers[binlog.FormatHash("float %g %c")]
+	if h == nil || fmt.Sprint(h.ArgKinds()) != "[float64 int32]" {
+		t.Errorf("argument kinds of the float call: %+v", h)
+	}
+}
