@@ -225,7 +225,6 @@ func TestTC_DEC_9_BadExecutable(t *testing.T) {
 // Cases below need sample programs that are written together with the feature.
 // They are placeholders that keep the test plan visible in `go test -v`.
 
-func TestTC_DEC_8_Binlogdump(t *testing.T)      { t.Skip("FR-DEC-10: write with the decoder command (F5)") }
 func TestTC_FIFO_9_LoggerOverFifo(t *testing.T) { t.Skip("FR-CONC-2: write with the FIFO (F6)") }
 
 // marks returns the line of every "// MARK: name" comment of the progdec source
@@ -401,5 +400,77 @@ func TestTC_DEC_7_ConstantExpression(t *testing.T) {
 	h := table.Handlers[binlog.FormatHash("float %g %c")]
 	if h == nil || fmt.Sprint(h.ArgKinds()) != "[float64 int32]" {
 		t.Errorf("argument kinds of the float call: %+v", h)
+	}
+}
+
+// TC-DEC-8 (FR-DEC-10): binlogdump prints the stream of the sample program as the text the
+// program computed, for every flag combination, and reports the entry it cannot decode
+func TestTC_DEC_8_Binlogdump(t *testing.T) {
+	dump := filepath.Join(buildDir, "binlogdump")
+	if out, err := exec.Command("go", "build", "-o", dump, "../cmd/binlogdump").CombinedOutput(); err != nil {
+		t.Fatalf("go build binlogdump: %v\n%s", err, out)
+	}
+	exe := build(t, "default")
+	// each run loads and type checks the sources (seconds), so not every combination
+	for _, flags := range []int{0, 2, 8, 15} {
+		flags := flags
+		t.Run(fmt.Sprintf("flags=%04b", flags), func(t *testing.T) {
+			dir := run(t, "default", flags)
+			var stdout, stderr bytes.Buffer
+			cmd := exec.Command(dump, "-flags", fmt.Sprint(flags), exe, filepath.Join(dir, "stream.bin"))
+			cmd.Stdout, cmd.Stderr = &stdout, &stderr
+			err := cmd.Run()
+			// the l2-cache cases are built at run time, they are not in the sources
+			if err == nil || !strings.Contains(stderr.String(), "Failed to find format string hash") {
+				t.Fatalf("expected the failure on the first l2-cache entry, got %v: %s", err, stderr.String())
+			}
+			names, expected := readTable(t, filepath.Join(dir, "expected.txt"))
+			lines := strings.Split(strings.TrimRight(stdout.String(), "\n"), "\n")
+			n := 0
+			for _, name := range names {
+				if strings.HasPrefix(name, "l2-cache") {
+					break
+				}
+				want, _ := strconv.Unquote(expected[name])
+				if n >= len(lines) || !strings.HasSuffix(lines[n], want) {
+					t.Fatalf("%s: line %d is %s, want it to end with %s", name, n, shorten(lines[min(n, len(lines)-1)]), shorten(want))
+				}
+				if flags&2 != 0 && !strings.Contains(lines[n], ".go:") {
+					t.Fatalf("%s: no source position in %s", name, shorten(lines[n]))
+				}
+				n++
+			}
+			if n != len(lines) {
+				t.Fatalf("%d lines, want %d", len(lines), n)
+			}
+		})
+	}
+}
+
+// TC-DEC-8: a stream with a header needs no -flags, and bad input gives a message and status 1
+func TestTC_DEC_8_BinlogdumpHeaderAndErrors(t *testing.T) {
+	dump := filepath.Join(buildDir, "binlogdump")
+	if _, err := os.Stat(dump); err != nil {
+		t.Skip("built by TestTC_DEC_8_Binlogdump")
+	}
+	// a stream that starts with the header needs no -flags
+	exe := build(t, "default")
+	dir := t.TempDir()
+	if out, err := exec.Command(exe, "-flags", "10", "-header", "-dir", dir).CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	var stdout, stderr bytes.Buffer
+	cmd := exec.Command(dump, exe, filepath.Join(dir, "stream.bin"))
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	cmd.Run() // fails on the l2-cache entry, as above
+	first := strings.SplitN(stdout.String(), "\n", 2)[0]
+	if !strings.HasPrefix(first, "0 ") || !strings.Contains(first, ".go:") || !strings.HasSuffix(first, "hello") {
+		t.Errorf("first line with timestamp and position expected, got %q (stderr %s)", first, stderr.String())
+	}
+	if out, err := exec.Command(dump, "/nonexistent", "/nonexistent").CombinedOutput(); err == nil || !strings.Contains(string(out), "not a Go executable") {
+		t.Errorf("missing executable: %v %s", err, out)
+	}
+	if out, err := exec.Command(dump).CombinedOutput(); err == nil || !strings.Contains(string(out), "usage") {
+		t.Errorf("no arguments: %v %s", err, out)
 	}
 }

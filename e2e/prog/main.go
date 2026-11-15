@@ -58,6 +58,7 @@ func logCase(name, expected string, do func() error) {
 func main() {
 	mask := flag.Int("flags", 0, "bit 0 string index, 1 source line, 2 log index, 3 timestamp")
 	dir := flag.String("dir", ".", "output directory")
+	header := flag.Bool("header", false, "start stream.bin with the stream header")
 	flag.Parse()
 	binlog.SEND_STRING_INDEX = *mask&1 != 0
 	binlog.ADD_SOURCE_LINE = *mask&2 != 0
@@ -66,6 +67,15 @@ func main() {
 
 	base, size := binlog.GetSelfTextAddressSize()
 	logger = binlog.Init(&buf, &binlog.WriterControlDummy{}, base, size)
+
+	if *header {
+		if err := logger.WriteHeader(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		stream.Write(buf.Bytes())
+		buf.Reset()
+	}
 
 	// Every call below uses its own literal: the L1 cache is keyed by the literal's address.
 	logCase("const-no-args", "hello", func() error { return logger.Log("hello") })

@@ -85,7 +85,7 @@ Out of scope: a network log transport, log rotation, and an interactive viewer.
 | FR-DEC-7 | S | Done | An import alias or a method receiver other than `binlog` is resolved by type, not by name. |
 | FR-DEC-8 | S | Done | Calls with an unsupported argument expression are reported with file and line, not dropped silently. |
 | FR-DEC-9 | C | Open | Decoding from the ELF `.rodata` alone, without sources. |
-| FR-DEC-10 | S | Open | A command-line decoder prints a binary stream as text, given a stream file and the executable. |
+| FR-DEC-10 | S | Done | A command-line decoder prints a binary stream as text, given a stream file and the executable. |
 
 ### 3.6 Ordering and compression
 

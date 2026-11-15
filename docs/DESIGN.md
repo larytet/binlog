@@ -248,7 +248,7 @@ Extend `parseLogLine` to accept `f e g c`, reuse `writerByteArray{count: 4|8}` f
 float bits (it already writes integers of those widths), and extend `DecodeNext` and
 `appendArg` for the new kinds.
 
-### 8.3 Decoder command (FR-DEC-10)
+### 8.3 Decoder command (FR-DEC-10) - done in `cmd/binlogdump`
 
 `cmd/binlogdump <executable> <stream>` loads the index table, reads the stream header,
 loops over `DecodeNext`, and prints `fmt.Sprintf(entry.FmtString, entry.Args...)`, with
